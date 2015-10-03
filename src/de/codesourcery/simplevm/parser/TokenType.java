@@ -1,0 +1,21 @@
+package de.codesourcery.simplevm.parser;
+
+public enum TokenType 
+{
+  EOL,
+  EOF,
+  NUMBER,
+  DOUBLE_QUOTE,
+  IDENTIFIER,
+  PARENS_OPEN,
+  PARENS_CLOSE,
+  COLON,
+  BRACES_OPEN,
+  BRACES_CLOSE,
+  OPERATOR,
+  TYPENAME,
+  COMMA,
+  FUNCTION_DEFINITION,
+  VARIABLE_DEFINITION,
+  TEXT
+}
