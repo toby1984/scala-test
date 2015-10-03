@@ -27,7 +27,7 @@ abstract class ASTNode extends IASTNode
   
   override def scope: Option[Scope] = parent.flatMap( p => p.scope )   
   
-  final def visitInOrder( visitor : IASTNode => Unit ) {
+  override final def visitInOrder( visitor : IASTNode => Unit ) {
     visitor( this )
     childs.foreach( _.visitInOrder( visitor ) )
   }

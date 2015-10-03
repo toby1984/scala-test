@@ -19,12 +19,12 @@ class Block extends ASTNode
 
 final class IntLiteral(value:String) extends ASTNode 
 {
-  def print(depth: Int): String = value
+  override def print(depth: Int): String = value
 }
 
 final class StringLiteral(text:String) extends ASTNode 
 {
-  def print(depth: Int): String = "\"" + text + "\""
+  override def print(depth: Int): String = "\"" + text + "\""
 }
 
 final class IdentifierNode(val name:Identifier) extends ASTNode {
@@ -32,9 +32,9 @@ final class IdentifierNode(val name:Identifier) extends ASTNode {
     override def print(depth:Int) : String = name.toString
 }
 
-final class FunctionArgument(val name:Identifier, kind:TypeName) extends ASTNode 
+final class FunctionArgument(val name:Identifier, val kind:TypeName) extends ASTNode 
 {
-  def print(depth: Int): String = name.toString +" : " + kind.symbol
+  override def print(depth: Int): String = name.toString +" : " + kind.name
 }
 
 final class Statement extends ASTNode
@@ -44,12 +44,12 @@ final class Statement extends ASTNode
 
 final class VariableDefinition(name:Identifier) extends ASTNode 
 {
-  def print(depth: Int): String = " " * depth + "val " + name.toString +" = "+ children.map( _.print(0) ).mkString(" " )
+  override def print(depth: Int): String = " " * depth + "val " + name.toString +" = "+ children.map( _.print(0) ).mkString(" " )
 }
 
-final class OperatorNode(operator:OperatorType) extends ASTNode 
+final class OperatorNode(val operator:OperatorType) extends ASTNode 
 {
-  def print(depth: Int): String = 
+  override def print(depth: Int): String = 
   {
     if ( operator == OperatorType.FUNCTION_CALL ) {
             child(0).print(0)+ children.drop(1).map( _.print(0) ).mkString(" , ")
@@ -83,7 +83,7 @@ final class FunctionDefinition(val name:Identifier) extends ASTNode
 
 final class FunctionArgumentsList extends ASTNode 
 {
-  def print(depth: Int): String = "( " + children.map( _.print(depth) ).mkString(" , ") + " )" 
+  override def print(depth: Int): String = "( " + children.map( _.print(depth) ).mkString(" , ") + " )" 
 }
 
 final class ParameterList extends ASTNode 

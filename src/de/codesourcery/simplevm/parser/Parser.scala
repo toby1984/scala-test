@@ -24,7 +24,7 @@ class Parser(lexer:ILexer)
     val ast = new AST()
     while( ! lexer.eof ) 
     {
-      parseStatement(ast.scope.get) match 
+      parseStatement(ast.scope.get,true) match 
       {
         case Some(x) =>  ast.addChild( x )
         case None => throw new RuntimeException("Syntax error: "+lastError)
@@ -40,10 +40,10 @@ class Parser(lexer:ILexer)
     None
   }
   
-  private[this] def parseStatement(scope:Scope) : Option[IASTNode] = 
+  private[this] def parseStatement(scope:Scope,functionDefinitionAllowed:Boolean) : Option[IASTNode] = 
   {
     skipBlankLines()  
-    val funcDef = parseFunctionDefinition(scope)
+    val funcDef = if ( functionDefinitionAllowed ) parseFunctionDefinition(scope) else None
     if ( funcDef.isDefined ) {
       return funcDef
     }
@@ -94,10 +94,10 @@ class Parser(lexer:ILexer)
       val id = Identifier( lexer.next().text )
       if ( consume(TokenType.COLON ) ) 
       {
-         if ( lexer.peek.hasType(TokenType.TYPENAME) ) 
+         val typeName = parseTypeName()
+         if ( typeName.isDefined )
          {
-           val typeName = TypeName.fromString( lexer.next().text )
-           val node = new FunctionArgument(id , typeName)
+           val node = new FunctionArgument(id , typeName.get )
            scope.define( Symbol( id , SymbolType.VARIABLE , node ) )
            return Some( node )
          } 
@@ -106,6 +106,58 @@ class Parser(lexer:ILexer)
       return fail("Expected a ':'")
     }
     fail("Expected an method argument identifier")
+  }
+  
+  private[this] def parseTypeName() : Option[TypeName] = 
+  {
+    val id = parseTypeNameWithQualifier()
+    if ( id.isDefined  ) 
+    {
+      if ( consume(OperatorType.ARROW) ) 
+      {
+        if ( lexer.peek( TokenType.IDENTIFIER ) ) 
+        {
+            val id2 = parseTypeNameWithQualifier()
+            if ( ! id2.isDefined )
+            {
+              return None
+            }
+            return Some( new TypeName( id.get +" => "+id2.get ) ) 
+        }
+        lastError = "Expected a return type identifier"
+        return None
+      }      
+      return Some( new TypeName( id.get ) ) 
+    }
+    lastError = "Expected a valid type name"
+    None
+  }
+  
+  private[this] def parseTypeNameWithQualifier() : Option[String] = 
+  {
+    if ( lexer.peek(TokenType.IDENTIFIER) ) 
+    {
+      val id = lexer.next().text
+      val isArray = parseArrayQualifier()
+      if ( ! isArray.isDefined )
+      {
+        return None
+      }
+      return Some( if ( isArray.get) id+"[]" else id )
+    }
+    None
+  }
+  
+  private[this] def parseArrayQualifier() : Option[Boolean] = 
+  {
+    if ( ! consume(TokenType.ANGLE_BRACKETS_OPEN ) ) {
+      return Some(false)
+    }
+    if ( consume( TokenType.ANGLE_BRACKETS_CLOSE ) ) {
+      return Some(true)
+    }
+    lastError = "Expected ']'"
+    return None
   }
   
   private[this] def parseBlock(scope:Scope) : Option[IASTNode] = 
@@ -117,7 +169,7 @@ class Parser(lexer:ILexer)
       var result : Option[IASTNode] = None
       do 
       {
-        result = parseStatement(scope)
+        result = parseStatement(scope,false)
         result.map( child => block.addChild( child ) )
       } while ( result.isDefined )
       skipBlankLines()  
@@ -206,8 +258,11 @@ class Parser(lexer:ILexer)
     {
       if ( lexer.peek( TokenType.OPERATOR ) ) 
       {
-        val opType = OperatorType.getOperatorType( lexer.next().text )
-        val expr = new OperatorNode( opType )
+        val opTypes = OperatorType.getOperatorTypes( lexer.next().text )
+        if ( opTypes.size != 1 ) {
+          throw new RuntimeException("Ambiguous operator: "+opTypes);
+        }
+        val expr = new OperatorNode( opTypes.get(0) )
         expr.addChild( value.get )
         val value2 = parseExpression()
         if ( value2.isDefined ) 

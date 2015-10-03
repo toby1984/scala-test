@@ -1,12 +1,15 @@
 package de.codesourcery.simplevm.parser;
 
 import java.util.Arrays;
+import java.util.List;
+import java.util.stream.Collectors;
 
 public enum OperatorType 
 {
     PLUS("+"),
     MINUS("-"),
     ASSIGNMENT("="),
+    ARROW("=>"),
     FUNCTION_CALL("") 
     {
         @Override
@@ -34,21 +37,8 @@ public enum OperatorType
         return Arrays.stream( values() ).filter( OperatorType::matchedByLexer ).anyMatch( type -> type.symbol.equals( s ) );
     }
     
-    public static OperatorType getOperatorType(String s) 
+    public static List<OperatorType> getOperatorTypes(String s) 
     {
-        OperatorType result = null;
-        for ( OperatorType t : values() ) 
-        {
-            if ( t.symbol.equals( s ) ) {
-                if (result != null ) {
-                    throw new IllegalArgumentException("Ambiguous operator symbol: '"+s+"'");
-                }
-                result = t;
-            }
-        }
-        if ( result == null ) {
-            throw new IllegalArgumentException("Unknown operator symbol: '"+s+"'");
-        }
-        return result;
+        return Arrays.stream( values() ).filter( OperatorType::matchedByLexer ).filter( e -> e.symbol.equals(s ) ).collect(Collectors.toList());
     }    
 }
