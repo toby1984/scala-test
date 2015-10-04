@@ -1,5 +1,7 @@
 package de.codesourcery.simplevm.parser
 
+import scala.util.parsing.input.Position
+
 trait ILexer 
 {  
   def eof : Boolean

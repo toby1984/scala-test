@@ -22,7 +22,7 @@ sealed case class Token(text:String,tokenType : TokenType,region:TextRegion)
    }
 }
 
-object Token {
-  
+object Token 
+{
   def apply( txt : Char , tokenType : TokenType,region:TextRegion ) : Token = Token( txt.toString , tokenType , region )
 }

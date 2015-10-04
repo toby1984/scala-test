@@ -62,7 +62,7 @@ class Parser(lexer:ILexer)
        {
          val identifier = Identifier( lexer.next().text )
          val func = new FunctionDefinition( identifier )
-         scope.define( Symbol(identifier,SymbolType.FUNCTION_NAME , func ) )
+         scope.defineLabel( identifier,SymbolType.FUNCTION_NAME , func )
          val signature = parseFunctionParameters( func.scope.get )
          if ( signature.isDefined ) 
          {
@@ -72,6 +72,11 @@ class Parser(lexer:ILexer)
               func.addChild( additional.get )
               additional = parseFunctionParameters( func.scope.get )
            }
+           val returnType = parseReturnType()
+           if ( ! returnType.isDefined ) {
+             return fail("Function definition lacks return type")
+           }
+           func.returnType = returnType.get
            val block = parseBlock( func.scope.get )
            if ( block.isDefined ) 
            {
@@ -87,6 +92,8 @@ class Parser(lexer:ILexer)
     fail("Expected a function definition")
   }
   
+  private[this] def parseReturnType() : Option[TypeName] = if ( consume( TokenType.COLON ) ) parseTypeName() else None
+  
   private[this] def parseFunctionParameter(scope:Scope) : Option[IASTNode] = 
   {
     if ( lexer.peek(TokenType.IDENTIFIER) ) 
@@ -98,7 +105,7 @@ class Parser(lexer:ILexer)
          if ( typeName.isDefined )
          {
            val node = new FunctionArgument(id , typeName.get )
-           scope.define( Symbol( id , SymbolType.VARIABLE , node ) )
+           scope.defineFinalValue( id , SymbolType.VARIABLE , node )
            return Some( node )
          } 
          return fail("Expected a type name")
@@ -210,7 +217,8 @@ class Parser(lexer:ILexer)
     val tok = lexer.peek
     if ( tok.hasType( TokenType.OPERATOR ) && tok.text == op.symbol ) 
     {
-      println("CONSUMED: "+lexer.next())
+      val debug = lexer.next()
+//      println("CONSUMED: "+debug)
       return true
     } 
     false
@@ -220,7 +228,8 @@ class Parser(lexer:ILexer)
   {
     if ( lexer.peek( tt ) ) 
     {
-      println("CONSUMED: "+lexer.next())
+      val tok = lexer.next
+//      println("CONSUMED: "+tok)
       return true
     } 
     return false
@@ -228,20 +237,29 @@ class Parser(lexer:ILexer)
   
   private[this] def parseVariableDefinition(scope:Scope) : Option[IASTNode] = 
   {
-    if ( consume(TokenType.VARIABLE_DEFINITION ) ) 
+    val isImmutable = consume(TokenType.FINAL_VAR )
+    val isMutable = ! isImmutable && consume(TokenType.MUTABLE_VAR)
+    if ( isImmutable || isMutable ) 
     {
       val tok = lexer.peek
       if ( tok.hasType( TokenType.IDENTIFIER ) ) 
       {
         val identifier = Identifier( lexer.next().text )
         val result = new VariableDefinition(identifier)
-        scope.define( Symbol(identifier,SymbolType.VARIABLE , result ) )
+        if ( isImmutable ) {
+          scope.defineFinalValue( identifier,SymbolType.VARIABLE , result )
+        } else {
+          scope.defineMutableValue( identifier,SymbolType.VARIABLE , result )
+        }
         if ( consume(OperatorType.ASSIGNMENT) ) 
         {
           val expr = parseExpression()
           if ( expr.isDefined ) 
           {
-            result.addChild( expr.get )
+            val assignment = new OperatorNode(OperatorType.ASSIGNMENT)
+            assignment.addChild( new IdentifierNode( identifier ) )
+            assignment.addChild( expr.get )
+            result.addChild( assignment )
             return Some(result)
           }
         }

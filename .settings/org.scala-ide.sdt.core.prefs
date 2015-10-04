@@ -24,6 +24,7 @@ explaintypes=false
 feature=true
 formatter.useProjectSpecificSettings=false
 g=vars
+lib=main
 nameHashing=false
 no-specialization=false
 nowarn=false

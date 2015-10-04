@@ -2,13 +2,15 @@ package de.codesourcery.simplevm.parser
 
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.ListBuffer
+import scala.collection.mutable.Stack
+import scala.util.parsing.input.Position
 
-class Lexer(private[this] val scanner:IScanner) extends ILexer 
-{  
+class Lexer(protected val scanner:IScanner) extends ILexer 
+{
   private[this] val NUMBER = "^([0-9]+)$".r
   private[this] val IDENTIFIER = "^([a-zA-Z][_a-zA-Z0-9]*)$".r;
   
-  private[this] val tokens = new ArrayBuffer[Token]
+  protected val tokens = new ArrayBuffer[Token]
   private[this] val buffer = new java.lang.StringBuilder
   
   override def eof : Boolean = peek.isEOF
@@ -24,7 +26,7 @@ class Lexer(private[this] val scanner:IScanner) extends ILexer
     }
     if ( advance ) tokens.remove(0) else tokens(0)
   }
-  
+
   override def toString():String = peek.toString
   
   private[this] def parse() 
@@ -122,10 +124,11 @@ class Lexer(private[this] val scanner:IScanner) extends ILexer
   private[this] def getTokenType(s : String) : Option[TokenType] =  s match 
   {
     case "def"                    => Some(TokenType.FUNCTION_DEFINITION)
-    case "val"                    => Some(TokenType.VARIABLE_DEFINITION)
+    case "val"                    => Some(TokenType.FINAL_VAR)
+    case "var"                    => Some(TokenType.MUTABLE_VAR)
     case NUMBER(x)                => Some(TokenType.NUMBER)
     case IDENTIFIER(x)            => Some(TokenType.IDENTIFIER)
     case x if x.trim.length() > 0 => Some(TokenType.TEXT)
     case _                        => None
-  }     
+  }
 }

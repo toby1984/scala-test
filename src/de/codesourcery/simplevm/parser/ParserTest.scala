@@ -22,10 +22,13 @@ import javax.swing.JTextArea
 import javax.swing.event.DocumentListener
 import javax.swing.event.DocumentEvent
 import javax.swing.JButton
+import java.io.ByteArrayOutputStream
+import java.io.PrintWriter
 
 object ParserTest 
 {
   private[this] val treeModel = new MyTreeModel
+  private[this] val errorMessages = new JTextArea
   
   class MyTreeModel extends TreeModel 
   {
@@ -65,25 +68,39 @@ object ParserTest
   
   private[this] def parse(code:String) 
   {
-   var lexer = new Lexer(new StringScanner(code) )
-    while ( ! lexer.eof ) {
-      println("GOT: "+lexer.next())
+    try {
+      var lexer = new Lexer(new StringScanner(code) )
+      val parser = new Parser(lexer)
+      val ast = parser.parse()
+      treeModel.setModelObject( ast )
+  
+      new Compiler().compile( ast )
+      
+      errorMessages.setText( null )
+    } 
+    catch 
+    {
+      case ex : Exception => 
+      {
+        val trace = new ByteArrayOutputStream
+        val writer = new PrintWriter(trace)
+        ex.printStackTrace( writer )
+        writer.close()
+        errorMessages.setText("Compilation failed: "+ex.getMessage()+"\n\n"+trace.toString() )
+      }
     }
-    lexer = new Lexer(new StringScanner(code))
-    val parser = new Parser(lexer)
-    val ast = parser.parse()
-    treeModel.setModelObject( ast )
-
-    println( ast.print(0) )
   }
   
   def main(args:Array[String]) 
   {
     val code = """val global = 42
-         def func1(a:int8,b:blubb)(c:string[] ,d:int8[] => string) 
+         def func1(a:int) : int
          {
-             func2 { 3+4,5 }
-             val e = "test"
+           a + a - 3
+         }
+         def main() : Unit
+         {
+             func1( global )
          }
     """
     parse( code )
@@ -124,6 +141,7 @@ object ParserTest
     panel.add( pane , BorderLayout.NORTH )
     panel.add( button, BorderLayout.WEST )
     panel.add(new JScrollPane( textfield ) , BorderLayout.CENTER )
+    panel.add(new JScrollPane( errorMessages ) , BorderLayout.SOUTH )
     
     frame.getContentPane.add( panel )
     frame.setPreferredSize( new Dimension(640,480) )

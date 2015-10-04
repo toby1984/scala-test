@@ -3,8 +3,12 @@ package de.codesourcery.simplevm.parser.ast
 import scala.collection.mutable.ArrayBuffer
 import de.codesourcery.simplevm.parser.Scope
 import scala.collection.mutable.Stack
+import de.codesourcery.simplevm.parser.TypeName
+import de.codesourcery.simplevm.parser.KnownTypes
+import de.codesourcery.simplevm.compiler.ICompilationParticipant
+import de.codesourcery.simplevm.compiler.ICompilationContext
 
-abstract class ASTNode extends IASTNode 
+abstract class ASTNode extends IASTNode  
 {
   private[this] val childs = new ArrayBuffer[IASTNode]
   private[this] var parentNode : Option[IASTNode] = None 
@@ -14,6 +18,8 @@ abstract class ASTNode extends IASTNode
     child.setParent( this )
     child
   }
+  
+  override def evaluate() : TypedResult = TypedResult( None, KnownTypes.ANY )
   
   override final def child(idx:Int) : IASTNode = childs(idx)
 
@@ -30,6 +36,11 @@ abstract class ASTNode extends IASTNode
   override final def visitInOrder( visitor : IASTNode => Unit ) {
     visitor( this )
     childs.foreach( _.visitInOrder( visitor ) )
+  }
+  
+  override def visitDepthFirst( visitor : IASTNode => Unit ) : Unit = {
+    childs.foreach( _.visitDepthFirst( visitor ) )
+    visitor( this )
   }
   
   final override def iterator : Iterator[IASTNode] = 
@@ -49,4 +60,6 @@ abstract class ASTNode extends IASTNode
       stack.push( ASTNode.this )
     }
   }
+  
+  override def visit(ctx:ICompilationContext) : Unit = children.foreach( _.visit(ctx) )
 }

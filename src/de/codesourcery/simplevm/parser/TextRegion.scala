@@ -1,10 +1,11 @@
 package de.codesourcery.simplevm.parser
 
+import scala.util.parsing.input.Position
+
 sealed case class TextRegion(offset:Int,length:Int) {
   
-  def merge(other:TextRegion) : TextRegion = TextRegion( Math.min( start , other.start ) , Math.max( end , other.end ) )
-  
   def start : Int = offset
+  
   def end : Int = offset+length
   
   if ( offset < 0 ) {
