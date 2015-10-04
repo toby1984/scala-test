@@ -23,7 +23,7 @@ final class Scope(val name:String,val owner:IASTNode)
     
     private[this] def defineValue( name:Identifier,symbolType:SymbolType, isImmutable: Boolean, node:IASTNode) 
     {
-      val s = new ValueSymbol(this,name,symbolType,node,isImmutable)
+      val s = new ValueSymbol(name,symbolType,node,isImmutable)
       println("Defining "+(if ( isImmutable ) "final" else "mutable" )+" variable "+name+" in scope "+this)
       if ( symbols.contains( s.name ) ) {
         throw new RuntimeException("Duplicate symbol "+s.name)
@@ -33,7 +33,7 @@ final class Scope(val name:String,val owner:IASTNode)
     
     def defineLabel( name:Identifier,symbolType:SymbolType, node:IASTNode) 
     {
-      val s = new LabelSymbol(this,name,symbolType,node)
+      val s = new LabelSymbol(name,symbolType,node)
       println("Defining label "+name+" in scope "+this)
       if ( symbols.contains( s.name ) ) {
         throw new RuntimeException("Duplicate symbol "+s.name)
@@ -61,16 +61,22 @@ final class Scope(val name:String,val owner:IASTNode)
       }
     }    
     
-    def fullyQualifiedName(symbol:Symbol) : String = 
+    def fullyQualifiedName : String = 
     {
-      var current : Option[Scope] = getOwningScope(symbol)
+      var current : Option[Scope] = Some(this)
       val list = ListBuffer[Scope]()
       while ( current.isDefined ) 
       {
         list += current.get
         current = current.get.parent
       }
-      list.reverse.map( s => s.name ).mkString(".")+"."+symbol.name
+      list.reverse.map( s => s.name ).mkString(".")
+    }    
+    
+    def fullyQualifiedName(symbol:Symbol) : String = 
+    {
+      val prefix = getOwningScope(symbol).get.fullyQualifiedName
+      prefix+"."+symbol.name
     }
     
     def isInThisScope(symbol:Symbol) : Boolean = 
@@ -109,7 +115,7 @@ final class Scope(val name:String,val owner:IASTNode)
     override def toString() : String = 
     {
       val map = symbols.map( pair => pair match { case (k,v) => k.toString + "=" + v.toString } )
-      identifier+"{"+map.mkString(" | ")+"}"
+      fullyQualifiedName+"{"+map.mkString(" | ")+"}"
     }
     
     if ( name == null || name.trim.length == 0 ) {

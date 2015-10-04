@@ -48,5 +48,5 @@ trait IASTNode extends Iterable[IASTNode] with ICompilationParticipant
   
   override def toString() : String = getClass.getSimpleName
   
-  def evaluate() : TypedResult
+  def evaluate() : TypedValue
 }

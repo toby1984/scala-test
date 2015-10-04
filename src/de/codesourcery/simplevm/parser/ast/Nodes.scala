@@ -17,12 +17,13 @@ class AST extends ASTNode
   
   override def print(depth:Int) : String = " " * depth + children.map( _.print(depth+1) ).mkString("\n")
   
-  override def evaluate() : TypedResult = TypedResult( None , KnownTypes.NOTHING )
+  override def evaluate() : TypedValue = TypedValue( None , KnownTypes.NOTHING )
   
   override def visit(ctx: ICompilationContext): Unit = 
   {
     ctx.pushScope( scope.get )
     super.visit( ctx )
+    ctx.popScope()
   }
 }
 
@@ -30,14 +31,14 @@ class Block extends ASTNode
 {
     override def print(depth:Int) : String = " " * depth + "{\n" + children.map( c => " " * (depth+1) + c.print(depth+1) ).mkString("\n") + "\n" + " " * depth + "}"
     
-    override def evaluate() : TypedResult =  if (hasNoChildren) TypedResult(None,KnownTypes.UNIT) else lastChild.evaluate()
+    override def evaluate() : TypedValue =  if (hasNoChildren) TypedValue(None,KnownTypes.UNIT) else lastChild.evaluate()
 }
 
 final class IntLiteral(text:String) extends ASTNode with ICompilationParticipant 
 {
   override def print(depth: Int): String = text
   
-  override def evaluate() : TypedResult = TypedResult(Some(text.toInt) , KnownTypes.INTEGRAL )
+  override def evaluate() : TypedValue = TypedValue(Some(text.toInt) , KnownTypes.INTEGRAL )
 
   override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate().value )
 }
@@ -46,7 +47,7 @@ final class StringLiteral(val value:String) extends ASTNode
 {
   override def print(depth: Int): String = "\"" + value + "\""
   
-  override def evaluate() : TypedResult = TypedResult(Some(value) , KnownTypes.STRING )
+  override def evaluate() : TypedValue = TypedValue(Some(value) , KnownTypes.STRING )
   
   override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate().value )
 }
@@ -55,16 +56,16 @@ final class IdentifierNode(val name:Identifier) extends ASTNode
 {  
     override def print(depth:Int) : String = name.toString
     
-    override def evaluate() : TypedResult = 
+    override def evaluate() : TypedValue = 
     {
       scope.get.getSymbol( name ) match 
       {
         case Some(x) => x.symbolType match 
         {
           case SymbolType.VARIABLE => x.asInstanceOf[ValueSymbol].node.evaluate()
-          case _ => TypedResult( None , KnownTypes.UNKNOWN )
+          case _ => TypedValue( None , KnownTypes.UNKNOWN )
         }
-        case None => TypedResult( None , KnownTypes.UNKNOWN )
+        case None => TypedValue( None , KnownTypes.UNKNOWN )
       }
     }
     
@@ -81,21 +82,21 @@ final class FunctionArgument(val name:Identifier, val kind:TypeName) extends AST
   
   override def visit(ctx: ICompilationContext): Unit = ctx.registerVariable( name , kind )
   
-  override def evaluate() : TypedResult = TypedResult(None, kind )
+  override def evaluate() : TypedValue = TypedValue(None, kind )
 }
 
 final class Statement extends ASTNode
 {
   override def print(depth:Int) : String = children.map( _.print(depth+1) ).mkString("\n")  
     
-  override def evaluate() : TypedResult = firstChild.evaluate()
+  override def evaluate() : TypedValue = firstChild.evaluate()
 }
 
 final class VariableDefinition(name:Identifier) extends ASTNode 
 {
   override def print(depth: Int): String = " " * depth + "val " + name.toString +" = "+ children.map( _.print(0) ).mkString(" " )
   
-  override def evaluate() : TypedResult = firstChild.evaluate()
+  override def evaluate() : TypedValue = firstChild.evaluate()
   
   override def visit(ctx:ICompilationContext) : Unit = 
   {
@@ -168,7 +169,7 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
     }
   }
   
-  override def evaluate() : TypedResult = 
+  override def evaluate() : TypedValue = 
   {
     if ( operator == OperatorType.ASSIGNMENT ) 
     {
@@ -196,10 +197,10 @@ final class FunctionDefinition(val name:Identifier,var returnType : TypeName = n
       return " " * depth + name.toString + argLists + " : "+returnType.name+"\n" + body
     }
     
-    override def evaluate() : TypedResult = 
+    override def evaluate() : TypedValue = 
     {
       val value = uniqueChild( classOf[ Block ] ).get.evaluate()
-      TypedResult( value.value , returnType )
+      TypedValue( value.value , returnType )
     }
     
     override def visit(ctx: ICompilationContext): Unit = 
@@ -214,6 +215,7 @@ final class FunctionDefinition(val name:Identifier,var returnType : TypeName = n
       finally 
       {
         ctx.popScope()
+        ctx.registerFunction( name )        
       }
     }
     

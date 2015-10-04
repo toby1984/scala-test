@@ -15,7 +15,7 @@ import de.codesourcery.simplevm.parser.ValueSymbol
 import de.codesourcery.simplevm.parser.LabelSymbol
 import scala.collection.mutable.HashMap
 import de.codesourcery.simplevm.parser.Scope
-import de.codesourcery.simplevm.parser.ast.TypedResult
+import de.codesourcery.simplevm.parser.ast.TypedValue
 import scala.collection.mutable.Stack
 import de.codesourcery.simplevm.parser.Identifier
 import de.codesourcery.simplevm.parser.TypeName
@@ -31,30 +31,39 @@ class Compiler
   
   def compile( ast : AST) 
   {
-     validate( ast )
+    validate( ast )
      
-     val ctx = new DefaultContext
-     ast.visit( ctx )
+    val ctx = new DefaultContext
+    ast.visit( ctx )
+    
+    println("Compilation yielded "+ctx.stackFrames.size+" frames")
+   
+    // print constant pool entries
+    println("=== Constant pool ===")
+    val pool = ctx.constantPool
+    for ( idx <- 0 until pool.values.size  ) 
+    {
+      val value = pool.values(idx)
+      println( "Index "+idx+": <ANON> = "+value)
+    }
      
-     println("Compilation yielded "+ctx.allFrames.size+" frames")
-     ctx.allFrames.foreach( printFrame )
-    // val globalScope = ctx.allFrames.filter( frame => frame.scope.isGlobalScope ).head     
+    ctx.stackFrames.values.foreach( printFrame )  
   }
   
   private[this] def printFrame(frame:MyFrame) 
   {
     println("=== Frame: "+frame.scope.name+" ===")
-    // print constant pool entries
-    for ( idx <- 0 until frame.constantPool.length ) 
+    
+    // print stack layout
+    for ( idx <- 0 until frame.slotIndex ) 
     {
-      val value = frame.constantPool(idx)
-      val key = frame.indices.filter{ case (k,v) => v == idx }.map( pair => pair._1 ).headOption
-      if ( key.isEmpty ) {
-        println( "Index "+idx+": <ANON> = "+value)
-      } else {
-        println( "Index "+idx+": "+key.get+" = "+value)
-      }
+      val key = frame.varSlots.filter{ case (k,v) => v == idx }.map( pair => pair._1 ).head
+      println( "Slot #"+idx+": variable "+key)
     }
+    
+    // print jump table
+    frame.jumpTable.foreach( _ match { case (k,v) => println( "Jumptable #"+k+": "+v) } )
+    
     // print instructions
     var idx = 0
     for ( ins <- frame.insBuffer ) 
@@ -94,11 +103,38 @@ class Compiler
    }
   }
   
+  private final class ConstantPool 
+  {
+    val values = new ListBuffer[Any]()
+    
+    def slotOf(value:Any) : Int = 
+    {
+       var index = 0;
+       while ( index < values.size ) 
+       {
+         if ( values(index) == value ) {
+               return index
+         }
+         index += 1
+       }
+       val result = values.size
+       value match 
+       {
+         case Some(x) => values += x
+         case _ => values += value
+       }
+       result
+    }
+  }
+  
+  private sealed case class VarEntry(name:Identifier,kind:TypeName)
+  
   private final class MyFrame(val scope : Scope) 
   {
+     var slotIndex = 0
      val insBuffer = new ListBuffer[Opcode]()
-     val indices = new HashMap[Identifier,Int]()
-     val constantPool = new ListBuffer[Any]()
+     val varSlots = new HashMap[VarEntry,Int]()
+     val jumpTable = new HashMap[Identifier,Int]()
      
      def addInsn(op:Opcode) : Unit = 
      {
@@ -106,73 +142,46 @@ class Compiler
        println("INSN: "+op)
      }
      
-     def storeConstant(name:Identifier, v : TypedResult )  = 
-     {
-       val idx = registerVariable(name , v.kind )
-       constantPool( idx ) = v.value
-     }
+     def registerFunction(name:Identifier) : Unit = jumpTable += name -> insBuffer.size
      
-     def slotIndexOf(symbol:Symbol) : Int = {
-       val result = indices.get( symbol.name )
-       if ( ! result.isDefined ) 
-       {
-          throw new RuntimeException("Internal error,failed to find slot for symbol "+symbol+" in frame "+scope)   
-       }
-       result.get
-     }
-     
-     def registerFunction(name:Identifier) : Unit = 
+     def slotOf(symbol:Symbol) : Int = 
      {
-       println("Registering function "+name+" , insBuffser size: "+insBuffer.size)
-       indices.get(name) match 
+       symbol.symbolType match 
        {
-         case Some(index:Int) => constantPool(index) = insBuffer.size
-         case None => 
+         case SymbolType.FUNCTION_NAME => jumpTable(symbol.name) 
+         case SymbolType.LABEL => jumpTable(symbol.name)
+         case SymbolType.VARIABLE => 
          {
-             val idx = constantPool.size
-             constantPool += insBuffer.size
-             indices += name -> idx
+           
+           val sym = symbol.asInstanceOf[ValueSymbol]
+           val key = VarEntry( symbol.name , sym.node.evaluate().kind )
+           varSlots(key)
          }
-       }       
+         case _ => throw new RuntimeException("Neither a function name nor a label: "+symbol)
+       }
      }
      
      def registerVariable(name:Identifier,kind:TypeName) : Int  = 
      {
-       indices.get(name) match 
+      val key = VarEntry( name , kind )       
+       varSlots.get(key) match 
        {
          case Some(index) => index
          case None => 
          {
-             val idx = constantPool.size
-             constantPool += null
-             indices += name -> idx
+             val idx = slotIndex
+             varSlots += key -> slotIndex
+             slotIndex+=1
              idx
          }
        }
-     }     
-     
-     def getOrStoreConstant(value:Any) : Int = 
-     {
-       constantPool.indexOf( value ) match {
-         case -1 => 
-         {
-           val idx = constantPool.size  
-           if ( value.getClass == classOf[ Some[_] ] ) 
-           {
-             constantPool += value.asInstanceOf[Some[_]].get
-           } else {
-             constantPool += value
-           }
-           idx
-         }
-         case x => x
-       }
-     }
+     }          
   }
   
   private final class DefaultContext extends ICompilationContext 
   {
-     val allFrames = ListBuffer[MyFrame]() 
+     val constantPool = new ConstantPool
+     val stackFrames = HashMap[String,MyFrame]() 
      
      private[this] val stack = Stack[MyFrame]()
      
@@ -186,23 +195,17 @@ class Compiler
      
      override def registerConstant(symbol:ValueSymbol) : Unit = 
      {
-         currentFrame.storeConstant( symbol.name , symbol.node.evaluate() )
+         val value = symbol.node.evaluate()
+         value match 
+         {
+           case TypedValue(Some(x),_) => constantPool.slotOf( x )
+           case _ => throw new RuntimeException("Need to have a value for "+symbol)
+         }
      }
      
-    override def pushScope(scope: Scope): Unit = stack.push( frameForScope( scope ) )
+    override def pushScope(scope: Scope): Unit =  stack.push( frameForScope( scope ) )
     
-    private[this] def frameForScope(scope:Scope) : MyFrame = 
-    {
-      allFrames.filter( frame => frame.scope == scope ).headOption match 
-      {
-        case Some(frame) => frame
-        case None => {
-          val frame = new MyFrame(scope)
-          allFrames += frame
-          frame
-        }
-      }
-    }
+    private[this] def frameForScope(scope:Scope) : MyFrame =  stackFrames.getOrElseUpdate( scope.fullyQualifiedName ,  new MyFrame(scope) )
     
     override def currentScope: Scope = stack.top.scope
 
@@ -220,8 +223,8 @@ class Compiler
      val frame = frameForScope( currentScope.getOwningScope( symbol ).get )
      symbol match 
      {
-       case x : ValueSymbol => addInsn( Opcode.LOAD_VARIABLE( frame.slotIndexOf( x ) ) ) // push value on stack
-       case x : LabelSymbol => addInsn( Opcode.LOAD_ADDRESS( frame.slotIndexOf( x ) ) )
+       case x : ValueSymbol => addInsn( Opcode.LOAD_VARIABLE( frame.slotOf( x ) ) ) // push value on stack
+       case x : LabelSymbol => addInsn( Opcode.LOAD_ADDRESS( frame.slotOf( x ) ) )
        case _ => throw new RuntimeException("Unreachable code reached")
      }
    }
@@ -229,7 +232,7 @@ class Compiler
     override def emitStore(symbol:ValueSymbol) = 
     { 
       val frame = frameForScope( currentScope.getOwningScope( symbol ).get )      
-      addInsn( Opcode.store( frame.slotIndexOf( symbol ) ) ) // pop value from stack and store it at given location
+      addInsn( Opcode.store( frame.slotOf( symbol ) ) ) // pop value from stack and store it at given location
     }
      
     override def emitJump() = addInsn( Opcode.JUMP ) // pop value from stack and jump to this location
@@ -245,7 +248,7 @@ class Compiler
 
     override def emitLoad(value: Any): Unit = 
     {
-      val slot = currentFrame.getOrStoreConstant(value)
+      val slot = constantPool.slotOf(value)
       addInsn( Opcode.LOAD_CONST( slot ) )
     }
 

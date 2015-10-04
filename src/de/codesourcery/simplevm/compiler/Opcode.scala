@@ -9,9 +9,10 @@ class Opcode(val opcode:Int,val mnemonic:String)
 
 object Opcode 
 {
-   def LOAD_CONST(slotIndex:Int) : Opcode = new Opcode(1,"LOAD_CONST #"+slotIndex) { 
+   def LOAD_CONST(slotIndex:Int) : Opcode = new Opcode(1,"LOAD_CONST #"+slotIndex) 
+   { 
       override def getBytes() : Array[Int] = Array[Int]( opcode , slotIndex )
-   }  
+   }
    
    val POP : Opcode = new Opcode(2,"POP")
    

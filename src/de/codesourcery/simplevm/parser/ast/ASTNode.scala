@@ -19,7 +19,7 @@ abstract class ASTNode extends IASTNode
     child
   }
   
-  override def evaluate() : TypedResult = TypedResult( None, KnownTypes.ANY )
+  override def evaluate() : TypedValue = TypedValue( None, KnownTypes.ANY )
   
   override final def child(idx:Int) : IASTNode = childs(idx)
 
