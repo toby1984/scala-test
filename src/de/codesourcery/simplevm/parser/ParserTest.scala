@@ -24,6 +24,8 @@ import javax.swing.event.DocumentEvent
 import javax.swing.JButton
 import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
+import java.awt.event.ActionListener
+import java.awt.event.ActionEvent
 
 object ParserTest 
 {
@@ -56,6 +58,7 @@ object ParserTest
       {
         this.ast = ast
         val ev = new TreeModelEvent(this,new TreePath(ast) )
+        println("Notifying "+listeners.size+" tree listeners")
         listeners.foreach { l => l.treeStructureChanged( ev ) }
       }
   }
@@ -82,6 +85,7 @@ object ParserTest
     {
       case ex : Exception => 
       {
+        ex.printStackTrace()
         val trace = new ByteArrayOutputStream
         val writer = new PrintWriter(trace)
         ex.printStackTrace( writer )
@@ -136,7 +140,13 @@ object ParserTest
     textfield.setMinimumSize( new Dimension(640,100) )
     
     val button = new JButton("Compile")
-    button.addActionListener( ev => parse( textfield.getText ) )
+    val listener = new ActionListener()
+    {
+      override def actionPerformed(ev:ActionEvent) {
+        parse( textfield.getText ) 
+      }
+    }
+    button.addActionListener( listener )
     
     panel.add( pane , BorderLayout.NORTH )
     panel.add( button, BorderLayout.WEST )

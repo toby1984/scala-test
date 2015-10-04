@@ -40,7 +40,7 @@ final class IntLiteral(text:String) extends ASTNode with ICompilationParticipant
   
   override def evaluate() : TypedValue = TypedValue(Some(text.toInt) , KnownTypes.INTEGRAL )
 
-  override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate().value )
+  override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate() )
 }
 
 final class StringLiteral(val value:String) extends ASTNode 
@@ -49,7 +49,7 @@ final class StringLiteral(val value:String) extends ASTNode
   
   override def evaluate() : TypedValue = TypedValue(Some(value) , KnownTypes.STRING )
   
-  override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate().value )
+  override def visit(ctx: ICompilationContext): Unit = ctx.emitLoad( evaluate() )
 }
 
 final class IdentifierNode(val name:Identifier) extends ASTNode 
@@ -122,17 +122,16 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   
   override def visit(ctx:ICompilationContext) : Unit = 
   {
-
     operator match 
     {
       case OperatorType.PLUS => 
       {
-        super.visit( ctx )        
+        children.reverse.foreach( _.visit(ctx) ) // write in reverse order to stack
         ctx.emitAdd()
       }
       case OperatorType.MINUS => 
       {
-        super.visit( ctx )        
+        children.reverse.foreach( _.visit(ctx) ) // write in reverse order to stack        
         ctx.emitSub()
       }
       case OperatorType.ASSIGNMENT => 
@@ -140,16 +139,12 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
          // child(0) is IdentifierNode
          child(1).visit(ctx)
          val identifier = child(0).asInstanceOf[IdentifierNode].name
-         val value = child(1).evaluate()
-         if ( value.value.isDefined ) 
-         {
-           val symbol = ctx.currentScope.getSymbol( identifier , SymbolType.VARIABLE ).get
-           ctx.emitStore( symbol.asInstanceOf[ValueSymbol] )           
-         } 
+         val symbol = ctx.currentScope.getSymbol( identifier , SymbolType.VARIABLE ).get
+         ctx.emitStore( symbol.asInstanceOf[ValueSymbol] )           
       }
       case OperatorType.FUNCTION_CALL => 
       {
-        children.drop(1).foreach( _.visit( ctx ) ) // ignore IdentifierNode, we'll load the target address last
+        children.drop(1).reverse.foreach( _.visit( ctx ) ) // ignore IdentifierNode, we'll load the target address last
         
         val funcName = child(0).asInstanceOf[IdentifierNode].name
         println("Visiting function call to "+funcName)
@@ -159,8 +154,7 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
         {
           case Some(symbol) =>  
           {
-            ctx.emitLoad( symbol )
-            ctx.emitJump()
+            ctx.emitJumpSubroutine( symbol.asInstanceOf[LabelSymbol] )
           }
           case None => throw new RuntimeException("Call to unknown function "+funcName)
         }

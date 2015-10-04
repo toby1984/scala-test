@@ -6,6 +6,7 @@ import de.codesourcery.simplevm.parser.Symbol
 import de.codesourcery.simplevm.parser.Scope
 import de.codesourcery.simplevm.parser.Identifier
 import de.codesourcery.simplevm.parser.TypeName
+import de.codesourcery.simplevm.parser.ast.TypedValue
 
 trait ICompilationContext 
 {
@@ -25,13 +26,13 @@ trait ICompilationContext
      
      def emitPop() : Unit // pop value from stack
      
-     def emitLoad(value:Any) : Unit// push value on stack
+     def emitLoad(value:TypedValue) : Unit// push value on stack
      
      def emitLoad(symbol:Symbol) : Unit// push value on stack
      
      def emitStore(symbol:ValueSymbol) : Unit// pop value from stack and store it at given location
      
-     def emitJump() : Unit// pop value from stack and jump to this location
+     def emitJumpSubroutine(symbol:LabelSymbol) : Unit// pop value from stack and jump to this location
      
      def emitAdd() : Unit// pop two values from stack , add them and push result
      

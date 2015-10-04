@@ -62,7 +62,7 @@ class Compiler
     }
     
     // print jump table
-    frame.jumpTable.foreach( _ match { case (k,v) => println( "Jumptable #"+k+": "+v) } )
+    frame.jumpTable.foreach( _ match { case (k,v) => println( "Jumptable: "+k+"(...) in slot # "+v) } )
     
     // print instructions
     var idx = 0
@@ -103,25 +103,33 @@ class Compiler
    }
   }
   
+  sealed case class ConstantEntry(value:Any,kind:TypeName)
+  
   private final class ConstantPool 
   {
-    val values = new ListBuffer[Any]()
+    val values = new ListBuffer[ConstantEntry]()
     
-    def slotOf(value:Any) : Int = 
+    def slotOf(v : TypedValue) : Int = 
     {
+       val value = v.value
+       val kind = v.kind
+       
+       kind.assertKnownType()
+       
        var index = 0;
        while ( index < values.size ) 
        {
-         if ( values(index) == value ) {
-               return index
+         val entry = values(index)
+         if ( entry.kind == kind && entry.value == value ) {
+           return index
          }
          index += 1
        }
        val result = values.size
        value match 
        {
-         case Some(x) => values += x
-         case _ => values += value
+         case Some(x) => values += ConstantEntry(x,kind)
+         case x => values += ConstantEntry(x,kind)
        }
        result
     }
@@ -131,9 +139,12 @@ class Compiler
   
   private final class MyFrame(val scope : Scope) 
   {
-     var slotIndex = 0
      val insBuffer = new ListBuffer[Opcode]()
+     
+     var slotIndex = 0
      val varSlots = new HashMap[VarEntry,Int]()
+     
+     var jmpTableIndex = 0
      val jumpTable = new HashMap[Identifier,Int]()
      
      def addInsn(op:Opcode) : Unit = 
@@ -142,14 +153,27 @@ class Compiler
        println("INSN: "+op)
      }
      
-     def registerFunction(name:Identifier) : Unit = jumpTable += name -> insBuffer.size
+     def registerFunction(name:Identifier) : Int = 
+     {
+       jumpTable.get(name) match 
+       {
+         case Some(idx) => idx
+         case None => 
+         {
+           val result = jmpTableIndex
+           jumpTable += name -> result
+           jmpTableIndex += 1 
+           result
+         }
+       }
+     }
      
      def slotOf(symbol:Symbol) : Int = 
      {
        symbol.symbolType match 
        {
-         case SymbolType.FUNCTION_NAME => jumpTable(symbol.name) 
-         case SymbolType.LABEL => jumpTable(symbol.name)
+         case SymbolType.FUNCTION_NAME =>  if ( jumpTable.contains(symbol.name) ) jumpTable(symbol.name) else registerFunction(symbol.name) 
+         case SymbolType.LABEL => if ( jumpTable.contains(symbol.name) ) jumpTable(symbol.name) else registerFunction(symbol.name)
          case SymbolType.VARIABLE => 
          {
            
@@ -198,10 +222,12 @@ class Compiler
          val value = symbol.node.evaluate()
          value match 
          {
-           case TypedValue(Some(x),_) => constantPool.slotOf( x )
+           case v @ TypedValue(Some(_),_) => constantPool.slotOf( v )
            case _ => throw new RuntimeException("Need to have a value for "+symbol)
          }
      }
+     
+    private[this] def topLevelFrame : MyFrame = stackFrames( Scope.GLOBAL_SCOPE_NAME )
      
     override def pushScope(scope: Scope): Unit =  stack.push( frameForScope( scope ) )
     
@@ -235,7 +261,7 @@ class Compiler
       addInsn( Opcode.store( frame.slotOf( symbol ) ) ) // pop value from stack and store it at given location
     }
      
-    override def emitJump() = addInsn( Opcode.JUMP ) // pop value from stack and jump to this location
+    override def emitJumpSubroutine(symbol:LabelSymbol) = addInsn( Opcode.JSR( topLevelFrame.slotOf( symbol ) ) ) // pop value from stack and jump to this location
      
     override def emitAdd() = addInsn( Opcode.ADD ) // pop two values from stack , add them and push result
      
@@ -246,7 +272,7 @@ class Compiler
        currentFrame.addInsn( op )
     }
 
-    override def emitLoad(value: Any): Unit = 
+    override def emitLoad(value: TypedValue ): Unit = 
     {
       val slot = constantPool.slotOf(value)
       addInsn( Opcode.LOAD_CONST( slot ) )

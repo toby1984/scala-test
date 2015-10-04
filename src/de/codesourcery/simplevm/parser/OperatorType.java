@@ -7,7 +7,7 @@ import java.util.function.BiFunction;
 import java.util.stream.Collectors;
 
 import de.codesourcery.simplevm.parser.ast.IASTNode;
-import de.codesourcery.simplevm.parser.ast.TypedResult;
+import de.codesourcery.simplevm.parser.ast.TypedValue;
 import scala.Option;
 
 public enum OperatorType 
@@ -26,16 +26,16 @@ public enum OperatorType
         }
         
         @Override
-        public TypedResult evaluate(IASTNode... args) 
+        public TypedValue evaluate(IASTNode... args) 
         {
-            final BiFunction<Optional<Object>, Optional<Object>, TypedResult> func = (opt1, opt2) -> 
+            final BiFunction<Optional<Object>, Optional<Object>, TypedValue> func = (opt1, opt2) -> 
             {
                 if ( allPresent(opt1,opt2) )
                 {
                     final long result = longValue(opt1) + longValue(opt2);
-                    return new TypedResult( some(result) ,  KnownTypes.INTEGRAL() );
+                    return new TypedValue( some(result) ,  KnownTypes.INTEGRAL() );
                 }
-                return new TypedResult( none() ,  KnownTypes.INTEGRAL() );                
+                return new TypedValue( none() ,  KnownTypes.INTEGRAL() );                
             };
             return binaryOp(args[0],args[1] , func );
         }
@@ -54,16 +54,16 @@ public enum OperatorType
         }        
         
         @Override
-        public TypedResult evaluate(IASTNode... args) 
+        public TypedValue evaluate(IASTNode... args) 
         {
-            final BiFunction<Optional<Object>, Optional<Object>, TypedResult> func = (opt1, opt2) -> 
+            final BiFunction<Optional<Object>, Optional<Object>, TypedValue> func = (opt1, opt2) -> 
             {
                 if ( allPresent(opt1,opt2) )
                 {
                     final long result = longValue( opt1 ) - longValue( opt2 );
-                    return new TypedResult( some(result) ,  KnownTypes.INTEGRAL() );
+                    return new TypedValue( some(result) ,  KnownTypes.INTEGRAL() );
                 }
-                return new TypedResult( none() ,  KnownTypes.INTEGRAL() );                
+                return new TypedValue( none() ,  KnownTypes.INTEGRAL() );                
             };
             return binaryOp(args[0],args[1] , func );
         }
@@ -76,7 +76,7 @@ public enum OperatorType
         }       
         
         @Override
-        public TypedResult evaluate(IASTNode... args) 
+        public TypedValue evaluate(IASTNode... args) 
         {
             return args[0].evaluate();
         }
@@ -119,7 +119,7 @@ public enum OperatorType
         throw new RuntimeException("getType() not implemented for "+this);
     }
     
-    public TypedResult evaluate(IASTNode... arguments) 
+    public TypedValue evaluate(IASTNode... arguments) 
     {
         throw new RuntimeException("evaluate() not implemented for "+this);
     }
@@ -134,7 +134,7 @@ public enum OperatorType
     
     protected final Optional<Object> value(IASTNode node) 
     {
-        final TypedResult result = node.evaluate();
+        final TypedValue result = node.evaluate();
         final Option<Object> value = result.value();
         return value.isEmpty() ? Optional.empty() : Optional.of( value.get() );
     }
@@ -144,7 +144,7 @@ public enum OperatorType
         return ((Number) obj.get() ).longValue();
     }
     
-    protected final TypedResult binaryOp(IASTNode n1 , IASTNode n2 , BiFunction<Optional<Object>,Optional<Object>,TypedResult> func)
+    protected final TypedValue binaryOp(IASTNode n1 , IASTNode n2 , BiFunction<Optional<Object>,Optional<Object>,TypedValue> func)
     {
         final Optional<Object> opt1 = value( n1 );
         final Optional<Object> opt2 = value( n2 );

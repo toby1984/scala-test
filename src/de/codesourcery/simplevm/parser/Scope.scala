@@ -125,7 +125,7 @@ final class Scope(val name:String,val owner:IASTNode)
 
 object Scope {
   
-  protected val GLOBAL_SCOPE_NAME = "<global>"
+  val GLOBAL_SCOPE_NAME = "<global>"
   
   def createGlobalScope(ast:AST) : Scope = new Scope( GLOBAL_SCOPE_NAME , ast  )
 }

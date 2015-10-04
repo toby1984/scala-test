@@ -12,7 +12,12 @@ sealed case class TypeName(name:String) {
   
   def isKnownType : Boolean = KnownTypes.isKnownType( sourceType ) && KnownTypes.isKnownType( targetType ) 
   
-  override def toString() : String = ">"+name + "<"
+  def assertKnownType() {
+    if ( ! isKnownType ) {
+      throw new RuntimeException("Expected a known type")
+    }
+  }
+  override def toString() : String = name
   
   if ( name == null || name.trim.length == 0 ) {
     throw new IllegalArgumentException("Name must not be NULL/blank")
