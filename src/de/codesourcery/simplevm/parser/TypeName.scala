@@ -17,6 +17,9 @@ sealed case class TypeName(name:String) {
       throw new RuntimeException("Expected a known type")
     }
   }
+  
+  def canBeAssignedTo(other:TypeName) : Boolean = this.name == other.name // TODO: Quick hack to get it working , implement proper checks here
+  
   override def toString() : String = name
   
   if ( name == null || name.trim.length == 0 ) {

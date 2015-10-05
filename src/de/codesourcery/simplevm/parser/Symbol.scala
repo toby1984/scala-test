@@ -10,7 +10,7 @@ class Symbol(val name:Identifier,val symbolType:SymbolType)
   if ( symbolType == null ) {
     throw new IllegalArgumentException("symbolType must not be NULL")
   }
-  override def toString() : String =  name+" , type: "+symbolType
+  override def toString() : String =  ">"+name+"< , type: "+symbolType
 }
 
 class ValueSymbol(name:Identifier,symbolType:SymbolType,val node:IASTNode,val isImmutable:Boolean) extends Symbol(name,symbolType) 

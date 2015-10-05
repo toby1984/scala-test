@@ -43,26 +43,37 @@ class Parser(lexer:ILexer)
   private[this] def parseStatement(scope:Scope,functionDefinitionAllowed:Boolean) : Option[IASTNode] = 
   {
     skipBlankLines()  
+    val stmt = new Statement()
+    def addChildAndReturn(n:Option[IASTNode]) : Some[IASTNode] = {
+      stmt.addChild( n.get )
+      Some( stmt )
+    }
+    
     val funcDef = if ( functionDefinitionAllowed ) parseFunctionDefinition(scope) else None
-    if ( funcDef.isDefined ) {
-      return funcDef
+    if ( funcDef.isDefined ) 
+    {
+      return addChildAndReturn( funcDef )
     }
     val varDef = parseVariableDefinition(scope)
     if ( varDef.isDefined ) {
-      return varDef
+      return addChildAndReturn( varDef )
     }
-    parseExpression()
+    parseExpression() match {
+      case node @ Some(_) => addChildAndReturn( node )
+      case _ => None
+    }
   }
   
-  private[this] def parseFunctionDefinition(scope:Scope) : Option[IASTNode] = 
+  private[this] def parseFunctionDefinition(parentScope:Scope) : Option[IASTNode] = 
   {
     if ( consume( TokenType.FUNCTION_DEFINITION ) ) 
     {
        if ( lexer.peek(TokenType.IDENTIFIER) ) 
        {
-         val identifier = Identifier( lexer.next().text )
-         val func = new FunctionDefinition( identifier )
-         scope.defineLabel( identifier,SymbolType.FUNCTION_NAME , func )
+         val name = Identifier( lexer.next().text )
+         val func = new FunctionDefinition(name,parentScope)
+         parentScope.defineLabel( name , SymbolType.FUNCTION_NAME , func )
+         
          val signature = parseFunctionParameters( func.scope.get )
          if ( signature.isDefined ) 
          {

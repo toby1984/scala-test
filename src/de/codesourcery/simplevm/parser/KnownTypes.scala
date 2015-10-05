@@ -2,17 +2,17 @@ package de.codesourcery.simplevm.parser
 
 object KnownTypes 
 {
-  val STRING = TypeName("string")
+  val STRING = TypeName("String")
   
-  val INTEGRAL = TypeName("int")
+  val INTEGRAL = TypeName("Int")
   
-  val UNIT = TypeName("unit")
+  val UNIT = TypeName("Unit")
   
-  val NOTHING = TypeName("nothing")
+  val NOTHING = TypeName("Nothing")
   
-  val ANY = TypeName("any")
+  val ANY = TypeName("Any")
   
-  val UNKNOWN = TypeName("unknown")  
+  val UNKNOWN = TypeName("Unknown")  
   
   val ALL_VALID = List[TypeName]( STRING , INTEGRAL , UNIT , NOTHING , ANY )
   

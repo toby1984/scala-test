@@ -14,11 +14,15 @@ trait ICompilationContext
      
      def pushScope(scope:Scope) : Unit
      
+     def registerFunction( name : Identifier ) : Unit
+     
      def popScope() : Unit
      
      def currentScope : Scope
      
-     def registerFunction(name:Identifier) : Unit
+     def beginFunction(name:Identifier,scope:Scope) : Unit
+     
+     def endFunction() : Unit
      
      def registerConstant(symbol:ValueSymbol) : Unit
      

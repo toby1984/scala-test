@@ -5,11 +5,11 @@ import de.codesourcery.simplevm.parser.ast.IASTNode
 import de.codesourcery.simplevm.parser.ast.AST
 import scala.collection.mutable.ListBuffer
 
-final class Scope(val name:String,val owner:IASTNode) 
+final class Scope(val name:String,val owner:IASTNode,val parent :Option[Scope]) 
 {
     private[this] val symbols = new HashMap[Identifier,Symbol]
     
-    var parent:Option[Scope] = None
+    def this(name:String,owner:IASTNode) = this(name,owner,None)
     
     def defineMutableValue( name:Identifier,symbolType:SymbolType, node:IASTNode) 
     {
@@ -31,7 +31,7 @@ final class Scope(val name:String,val owner:IASTNode)
       symbols += s.name -> s
     }
     
-    def defineLabel( name:Identifier,symbolType:SymbolType, node:IASTNode) 
+    def defineLabel( name:Identifier,symbolType:SymbolType, node:IASTNode) : LabelSymbol =
     {
       val s = new LabelSymbol(name,symbolType,node)
       println("Defining label "+name+" in scope "+this)
@@ -39,6 +39,7 @@ final class Scope(val name:String,val owner:IASTNode)
         throw new RuntimeException("Duplicate symbol "+s.name)
       }
       symbols += s.name -> s
+      s
     }    
     
     def getSymbols : Seq[Symbol] = symbols.values.toSeq
@@ -105,8 +106,6 @@ final class Scope(val name:String,val owner:IASTNode)
         val result = if ( parent.isDefined ) parent.get.getAllSymbols else Map()
         return result ++ symbols
     }
-    
-    def setParent(s : Option[Scope] ) = this.parent = s
     
     def identifier : String = if ( parent.isDefined ) parent.get.identifier + "." + name else name 
     

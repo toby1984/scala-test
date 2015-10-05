@@ -1,5 +1,6 @@
 package de.codesourcery.simplevm.parser.ast
 
+import de.codesourcery.simplevm.compiler.Compiler
 import de.codesourcery.simplevm.parser.Scope
 import de.codesourcery.simplevm.parser.Identifier
 import de.codesourcery.simplevm.parser.OperatorType
@@ -21,10 +22,32 @@ class AST extends ASTNode
   
   override def visit(ctx: ICompilationContext): Unit = 
   {
+    // generate code for global variable definitions first
+    ctx.beginFunction(Identifier("__init__"), scope.get )
+    val ( globalVars , rest ) = children.map( s => s.asInstanceOf[Statement] ).partition( _.isVariableDefinition )
+    globalVars.foreach( _.visit(ctx) )
+    getMainMethod match 
+    {
+      case Some(node) => 
+      {
+        println("Found main method")
+        ctx.registerFunction( Compiler.MAIN_METHOD_IDENTIFIER )
+        val symbol = node.scope.get.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER , SymbolType.FUNCTION_NAME ).get        
+        ctx.emitJumpSubroutine( symbol.asInstanceOf[LabelSymbol] )
+      }
+      case None => println("No main method")
+    }
+    ctx.endFunction()
+    
     ctx.pushScope( scope.get )
-    super.visit( ctx )
+    rest.foreach( _.visit(ctx) )
     ctx.popScope()
   }
+  
+  def getMainMethod : Option[FunctionDefinition] = filter( _.isInstanceOf[FunctionDefinition] )
+     .filter( node => Compiler.isMainMethod(node) )
+     .map( _.asInstanceOf[FunctionDefinition] )
+     .headOption
 }
 
 class Block extends ASTNode 
@@ -72,7 +95,11 @@ final class IdentifierNode(val name:Identifier) extends ASTNode
   override def visit(ctx: ICompilationContext): Unit = 
   {
     val symbol = ctx.currentScope.getSymbol( name )
-    ctx.emitLoad( symbol.get )
+    symbol match 
+    {
+      case Some(x) => ctx.emitLoad( x )
+      case None => throw new RuntimeException("Failed to find symbol "+name+" in "+ctx.currentScope)
+    }
   }
 }
 
@@ -90,6 +117,8 @@ final class Statement extends ASTNode
   override def print(depth:Int) : String = children.map( _.print(depth+1) ).mkString("\n")  
     
   override def evaluate() : TypedValue = firstChild.evaluate()
+  
+  def isVariableDefinition : Boolean = hasChildren && firstChild.isInstanceOf[VariableDefinition]
 }
 
 final class VariableDefinition(name:Identifier) extends ASTNode 
@@ -174,15 +203,9 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   }
 }
 
-final class FunctionDefinition(val name:Identifier,var returnType : TypeName = null) extends ASTNode 
+final class FunctionDefinition(val name:Identifier,parentScope:Scope,var returnType : TypeName = null ) extends ASTNode 
 {
-    override val scope = Some( new Scope( name.toString , this ) )
-    
-    override def setParent(p : IASTNode ) : Unit = 
-    {
-      super.setParent( p )
-      scope.get.setParent( p.scope )
-    }  
+    override val scope = Some( new Scope( name.name , this , Some(parentScope ) ) )
     
     override def print(depth:Int) : String = 
     {
@@ -200,16 +223,14 @@ final class FunctionDefinition(val name:Identifier,var returnType : TypeName = n
     override def visit(ctx: ICompilationContext): Unit = 
     {
       println("== Emitting "+name+" in scope "+ctx.currentScope.name+" === ")
-      ctx.registerFunction( name )
-      ctx.pushScope( scope.get )
+      ctx.beginFunction( name , scope.get )
       try {
         children.foreach( _.visit( ctx ) )
         ctx.emitReturn()
       } 
       finally 
       {
-        ctx.popScope()
-        ctx.registerFunction( name )        
+        ctx.endFunction()        
       }
     }
     

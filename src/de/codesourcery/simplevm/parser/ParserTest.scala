@@ -98,7 +98,7 @@ object ParserTest
   def main(args:Array[String]) 
   {
     val code = """val global = 42
-         def func1(a:int) : int
+         def func1(a:Int) : Int
          {
            a + a - 3
          }
