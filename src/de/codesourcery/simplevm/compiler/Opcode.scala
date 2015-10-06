@@ -2,9 +2,14 @@ package de.codesourcery.simplevm.compiler
 
 import scala.collection.mutable.ListBuffer
 
-class Opcode(val opcode:Int,val mnemonic:String) 
+class Opcode(val opcode:Int,val slotIndex:Int,val mnemonic:String) 
 {
    def toBinary() : Array[Int] = Array[Int]( opcode )
+   
+   def this(opcode:Int,mnemonic:String) 
+   {
+     this(opcode,0,mnemonic)
+   }
    
    final def append(out:ListBuffer[Int]) : Unit = 
    {
