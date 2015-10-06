@@ -14,6 +14,9 @@ import de.codesourcery.simplevm.parser.ast.StringLiteral
 import scala.collection.mutable.ArrayBuffer
 import de.codesourcery.simplevm.parser.ast.FunctionArgumentsList
 import de.codesourcery.simplevm.parser.ast.FunctionArgument
+import scala.collection.mutable.ListBuffer
+import de.codesourcery.simplevm.parser.ast.FunctionDeclaration
+import de.codesourcery.simplevm.Misc
 
 class Parser(lexer:ILexer) 
 {
@@ -49,11 +52,12 @@ class Parser(lexer:ILexer)
       Some( stmt )
     }
     
-    val funcDef = if ( functionDefinitionAllowed ) parseFunctionDefinition(scope) else None
+    val funcDef = if ( functionDefinitionAllowed ) parseFunctionDefOrDecl(scope) else None
     if ( funcDef.isDefined ) 
     {
       return addChildAndReturn( funcDef )
     }
+    
     val varDef = parseVariableDefinition(scope)
     if ( varDef.isDefined ) {
       return addChildAndReturn( varDef )
@@ -64,39 +68,49 @@ class Parser(lexer:ILexer)
     }
   }
   
-  private[this] def parseFunctionDefinition(parentScope:Scope) : Option[IASTNode] = 
+  private[this] def parseFunctionDefOrDecl(parentScope:Scope) : Option[IASTNode] = 
   {
+    val isExternal = consume(TokenType.EXTERNAL)
     if ( consume( TokenType.FUNCTION_DEFINITION ) ) 
     {
        if ( lexer.peek(TokenType.IDENTIFIER) ) 
        {
          val name = Identifier( lexer.next().text )
-         val func = new FunctionDefinition(name,parentScope)
-         parentScope.defineLabel( name , SymbolType.FUNCTION_NAME , func )
          
-         val signature = parseFunctionParameters( func.scope.get )
-         if ( signature.isDefined ) 
+         val newScope = new Scope( name.name , Some(parentScope ) )
+         
+         val signature = parseFunctionParameters( Some( newScope ) )
+         if ( ! signature.isDefined ) 
          {
-           func.addChild( signature.get )
-           var additional = parseFunctionParameters( func.scope.get )
-           while ( additional.isDefined ) {
-              func.addChild( additional.get )
-              additional = parseFunctionParameters( func.scope.get )
-           }
-           val returnType = parseReturnType()
-           if ( ! returnType.isDefined ) {
-             return fail("Function definition lacks return type")
-           }
-           func.returnType = returnType.get
-           val block = parseBlock( func.scope.get )
-           if ( block.isDefined ) 
-           {
-             func.addChild( block.get )
-             return Some(func)
-           }
-           return fail("Function body expected")
+           return fail("Function parameter list expected")           
          }
-         return fail("Function parameter list expected")
+         
+         val children = ListBuffer[IASTNode]()
+         children += signature.get
+         children ++ Misc.repeatUntilNone( parseFunctionParameters( Some( newScope ) ) )
+
+         val returnType = parseReturnType()
+         if ( ! returnType.isDefined ) {
+           return fail("Function definition lacks return type")
+         }
+         
+         val block = parseBlock( newScope )
+         if ( block.isDefined ) // found body => function definition 
+         {
+           if ( isExternal ) {
+             return fail("external function cannot have body")
+           }
+           val func = new FunctionDefinition(name,newScope,returnType.get)           
+           func.addChildren( children )
+           func.addChild( block.get )
+           parentScope.defineLabel( name , SymbolType.FUNCTION_NAME , func )
+           return Some( func )
+         } 
+         // no body => function declaration
+         val func = new FunctionDeclaration(name,returnType.get)           
+         func.addChildren( children )
+         parentScope.defineLabel( name , SymbolType.FUNCTION_NAME , func )           
+         return Some( func )
        }
        return fail("function name expected")
     }
@@ -105,7 +119,7 @@ class Parser(lexer:ILexer)
   
   private[this] def parseReturnType() : Option[TypeName] = if ( consume( TokenType.COLON ) ) parseTypeName() else None
   
-  private[this] def parseFunctionParameter(scope:Scope) : Option[IASTNode] = 
+  private[this] def parseFunctionParameter(scope:Option[Scope]) : Option[IASTNode] = 
   {
     if ( lexer.peek(TokenType.IDENTIFIER) ) 
     {
@@ -116,7 +130,9 @@ class Parser(lexer:ILexer)
          if ( typeName.isDefined )
          {
            val node = new FunctionArgument(id , typeName.get )
-           scope.defineFinalValue( id , SymbolType.VARIABLE , node )
+           if ( scope.isDefined ) {
+             scope.get.defineFinalValue( id , SymbolType.VARIABLE , node )
+           }
            return Some( node )
          } 
          return fail("Expected a type name")
@@ -184,12 +200,7 @@ class Parser(lexer:ILexer)
     if ( consume( TokenType.BRACES_OPEN ) ) 
     {
       val block = new Block
-      var result : Option[IASTNode] = None
-      do 
-      {
-        result = parseStatement(scope,false)
-        result.map( child => block.addChild( child ) )
-      } while ( result.isDefined )
+      block.addChildren( Misc.repeatUntilNone( parseStatement(scope,false) ) )
       skipBlankLines()  
       if ( consume( TokenType.BRACES_CLOSE ) ) {
         return Some( block )
@@ -204,17 +215,17 @@ class Parser(lexer:ILexer)
     }
   }
   
-  private[this] def parseFunctionParameters(scope:Scope) : Option[IASTNode] = 
+  private[this] def parseFunctionParameters(scope:Option[Scope]) : Option[IASTNode] = 
   {
     if ( consume( TokenType.PARENS_OPEN ) ) 
     {
       val params = new ParameterList
-      var list = parseFunctionParameter(scope)
-      while ( list.isDefined )
-      {
-          params.addChild( list.get )
-          list = if ( consume( TokenType.COMMA ) ) parseFunctionParameter(scope) else None
+      val list = parseOptionalCommaSeparatedValuesUsing( parseFunctionParameter(scope) )
+      if ( ! list.isDefined ) {
+        return None
       }
+      params.addChildren( list.get )
+      
       if ( consume( TokenType.PARENS_CLOSE ) ) {
         return Some( params )
       }
@@ -228,8 +239,7 @@ class Parser(lexer:ILexer)
     val tok = lexer.peek
     if ( tok.hasType( TokenType.OPERATOR ) && tok.text == op.symbol ) 
     {
-      val debug = lexer.next()
-//      println("CONSUMED: "+debug)
+      lexer.next()
       return true
     } 
     false
@@ -239,8 +249,7 @@ class Parser(lexer:ILexer)
   {
     if ( lexer.peek( tt ) ) 
     {
-      val tok = lexer.next
-//      println("CONSUMED: "+tok)
+      lexer.next
       return true
     } 
     return false
@@ -345,36 +354,33 @@ class Parser(lexer:ILexer)
      fail("Expected a value")
   }
   
-  private[this] def parseFunctionArgumentLists() : Option[ Seq[FunctionArgumentsList] ] = 
+  private[this] def parseFunctionArgumentLists() : Option[ Seq[IASTNode] ] = 
   {
-    val result = new ArrayBuffer[FunctionArgumentsList]
-    var tmp = parseFunctionArgumentList()
-    if ( ! tmp.isDefined ) {
+    val list = parseOptionalCommaSeparatedValuesUsing( parseFunctionArgumentList() )
+    if ( ! list.isDefined ) {
+      return None
+    }
+    if ( list.get.isEmpty ) {
       lastError = "Expected function call argument list @ "+lexer.peek
       return None
     }
-    result += tmp.get
-    while ( tmp.isDefined ) {
-      tmp = parseFunctionArgumentList()
-      tmp.foreach( list => result += list )
-    }
-    return Some(result)
+    list
   }
   
   private[this] def isOpeningParens(tok : Token) : Boolean = tok.hasType(TokenType.PARENS_OPEN) || tok.hasType( TokenType.BRACES_OPEN )
   
-  private[this] def parseFunctionArgumentList() : Option[ FunctionArgumentsList ] = 
+  private[this] def parseFunctionArgumentList() : Option[ IASTNode ] = 
   {
        val token = lexer.peek
        if ( isOpeningParens( token ) ) { // => function invocation
          lexer.next()
-         var result = new FunctionArgumentsList
-         var node = parseExpression()
-         while ( node.isDefined ) 
-         {
-           result.addChild( node.get )
-           node = if ( consume(TokenType.COMMA) ) parseExpression() else None
+         val result = new FunctionArgumentsList
+         val args = parseOptionalCommaSeparatedValuesUsing( parseExpression )
+         if ( ! args.isDefined ) {
+           return None
          }
+         result.addChildren( args.get )
+
          val closingType = if ( token.tokenType == TokenType.PARENS_OPEN ) TokenType.PARENS_CLOSE else TokenType.BRACES_CLOSE 
          if ( ! consume( closingType ) ) 
          {
@@ -384,5 +390,27 @@ class Parser(lexer:ILexer)
          return Some(result)
        }
        return None
+  }
+  
+  private[this] def parseOptionalCommaSeparatedValuesUsing( parse : => Option[IASTNode] ) : Option[ Seq[IASTNode] ] = 
+  {
+      val result = ListBuffer[IASTNode]()
+      var tmp = parse
+      while ( tmp.isDefined ) 
+      {
+         result += tmp.get
+         if ( consume(TokenType.COMMA) ) 
+         {
+           tmp = parse
+           if ( ! tmp.isDefined ) 
+           {
+             lastError = "Expected another value after comma"
+             return None
+           }
+         } else {
+           tmp = None
+         }
+      }
+      Some( result )
   }
 }

@@ -69,21 +69,25 @@ final class Compiler
       insPtrs.toSeq.sortBy( pair => pair._1 ).map( pair => pair._2)
     }
     
-    def registerFunction(name:Identifier) : Int = 
+    def declareFunction(name:Identifier): Unit = maybeCreateFunctionEntry(name,-1 ) // -1 is special marker for unresolved (external) function 
+    
+    def defineFunction(name:Identifier): Unit = maybeCreateFunctionEntry(name,insBuffer.size)
+    
+    private[this] def maybeCreateFunctionEntry(name:Identifier,insOffset:Int) : Unit = 
     {
-      functionToSlot.get(name) match 
+      val slotIdx = functionToSlot.get(name) match 
       {
-        case Some(idx) => idx
+        case Some(x) => x
         case None => 
         {
-          val idx = jmpTableIndex
-          functionToSlot += name -> idx
-          insPtrs += idx -> insBuffer.size
-          jmpTableIndex += 1 
-          idx
+           val idx = jmpTableIndex
+           jmpTableIndex += 1
+           functionToSlot += name -> idx
+           idx
         }
       }
-    }               
+      insPtrs += slotIdx -> insOffset
+    }
     
     def addInsn(op:Opcode) : Unit = 
     {
@@ -165,7 +169,9 @@ final class Compiler
      
      def incPassNo() = passNo += 1
      
-     def registerFunction(name:Identifier) : Unit = jumpTable.registerFunction( name )
+     def declareFunction(name:Identifier): Unit = jumpTable.declareFunction( name )
+     
+     def defineFunction(name:Identifier): Unit = jumpTable.defineFunction( name )
      
      private[this] def currentFrame : MyFrame = stack.top
      
@@ -216,18 +222,16 @@ final class Compiler
      
     override def registerVariable(name: Identifier, kind: TypeName): Unit = currentFrame.registerVariable( name , kind )
     
-     def beginFunction(name:Identifier,scope:Scope) : Unit = 
-     {
+    def beginFunction(name:Identifier,scope:Scope) : Unit = 
+    {
       currentFunction = Some(name)
-      jumpTable.registerFunction( name )
+      jumpTable.defineFunction( name )
       pushScope( scope )
     }
      
      def endFunction() : Unit = 
      {
-       jumpTable.registerFunction( currentFunction.get )
        currentFunction = None
-       
        popScope()       
      }
      

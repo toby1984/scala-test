@@ -5,11 +5,11 @@ import de.codesourcery.simplevm.parser.ast.IASTNode
 import de.codesourcery.simplevm.parser.ast.AST
 import scala.collection.mutable.ListBuffer
 
-final class Scope(val name:String,val owner:IASTNode,val parent :Option[Scope]) 
+final class Scope(val name:String,val parent :Option[Scope]) 
 {
     private[this] val symbols = new HashMap[Identifier,Symbol]
     
-    def this(name:String,owner:IASTNode) = this(name,owner,None)
+    def this(name:String) = this(name,None)
     
     def defineMutableValue( name:Identifier,symbolType:SymbolType, node:IASTNode) 
     {
@@ -126,5 +126,5 @@ object Scope {
   
   val GLOBAL_SCOPE_NAME = "<global>"
   
-  def createGlobalScope(ast:AST) : Scope = new Scope( GLOBAL_SCOPE_NAME , ast  )
+  def createGlobalScope() : Scope = new Scope( GLOBAL_SCOPE_NAME )
 }

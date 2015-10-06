@@ -10,6 +10,8 @@ trait IASTNode extends Iterable[IASTNode] with ICompilationParticipant
   
   def childCount : Int
   
+  final def addChildren(c : Iterable[IASTNode] ) : Unit =  c.foreach( addChild )
+  
   def addChild(child:IASTNode) : IASTNode
   
   def child(idx:Int) : IASTNode

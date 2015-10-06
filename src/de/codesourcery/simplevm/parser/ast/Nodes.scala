@@ -14,7 +14,7 @@ import de.codesourcery.simplevm.parser.LabelSymbol
 
 class AST extends ASTNode
 {
-  override val scope = Some( Scope.createGlobalScope(this) )
+  override val scope = Some( Scope.createGlobalScope() )
   
   override def print(depth:Int) : String = " " * depth + children.map( _.print(depth+1) ).mkString("\n")
   
@@ -31,7 +31,7 @@ class AST extends ASTNode
       case Some(node) => 
       {
         println("Found main method")
-        ctx.registerFunction( Compiler.MAIN_METHOD_IDENTIFIER )
+        ctx.declareFunction( Compiler.MAIN_METHOD_IDENTIFIER )
         val symbol = node.scope.get.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER , SymbolType.FUNCTION_NAME ).get        
         ctx.emitJumpSubroutine( symbol.asInstanceOf[LabelSymbol] )
       }
@@ -203,9 +203,22 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   }
 }
 
-final class FunctionDefinition(val name:Identifier,parentScope:Scope,var returnType : TypeName = null ) extends ASTNode 
+final class FunctionDeclaration(val name:Identifier,val returnType : TypeName) extends ASTNode 
 {
-    override val scope = Some( new Scope( name.name , this , Some(parentScope ) ) )
+    override def evaluate() : TypedValue = TypedValue( None , returnType )
+    
+    override def visit(ctx: ICompilationContext): Unit = ctx.declareFunction( name )
+    
+    override def print(depth:Int) : String = 
+    {
+      val argLists = children.filter( _.isInstanceOf[ParameterList] ).map( _.print(depth+1) ).mkString
+      return " " * depth + " extern " + name.toString + argLists + " : "+returnType.name
+    }    
+}
+
+final class FunctionDefinition(val name:Identifier,s:Scope,val returnType : TypeName) extends ASTNode 
+{
+    override val scope = Some( s )
     
     override def print(depth:Int) : String = 
     {

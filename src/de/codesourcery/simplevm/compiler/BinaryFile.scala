@@ -197,32 +197,31 @@ protected class Serializer(output: OutputStream,input:InputStream)
     output.write( value & 0xff )
   }
   
-  def readByteArray(len:Int) : Array[Byte] = {
+  def readByteArray(len:Int) : Array[Byte] = 
+  {
     val result = new Array[Byte](len)
-    for ( i <- 0 until len ) 
-    {
-      val tmp = input.read()
-      if ( tmp == -1 ) {
-        throw new EOFException()
-      }
-      result(i) = tmp.asInstanceOf[Byte]
+    if ( input.read( result ) != len ) {
+      throw new EOFException()
     }
     result
   }
   
   def readInt() : Int = 
   {
-    var result = 0
-    for ( i <- 0 until 4 ) 
-    {
-      result = result << 8
-      val tmp = input.read()
-      if ( tmp == -1 ) {
-        throw new EOFException()
-      }
-      result = result | tmp
-    }
+    var result = readSafely() << 8
+    result = (result | readSafely() ) << 8
+    result = (result | readSafely() ) << 8
+    result = (result | readSafely() )    
     result
+  }
+  
+  private[this] def readSafely() : Int = 
+  {
+    val tmp = readInt()
+    if ( tmp == -1 ) {
+      throw new EOFException()
+    }   
+    tmp
   }
   
   def writeConstantEntry(entry:ConstantEntry) : Unit = 
@@ -276,18 +275,11 @@ protected class Serializer(output: OutputStream,input:InputStream)
   
   def readString() : String = 
   {
-    val len : Int = readInt()
-    if ( len == -1 ) {
-      throw new EOFException()
-    }
+    val len = readSafely()
     val array = new Array[Char](len)
     for ( i <- 0 until len ) 
     {
-      val tmp = input.read()
-      if ( len == -1 ) {
-        throw new EOFException()
-      }
-      array(i) = tmp.asInstanceOf[Char]
+      array(i) = readSafely().asInstanceOf[Char]
     }
     new String(array)
   }

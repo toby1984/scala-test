@@ -126,6 +126,7 @@ class Lexer(protected val scanner:IScanner) extends ILexer
     case "def"                    => Some(TokenType.FUNCTION_DEFINITION)
     case "val"                    => Some(TokenType.FINAL_VAR)
     case "var"                    => Some(TokenType.MUTABLE_VAR)
+    case "external"               => Some(TokenType.EXTERNAL)
     case NUMBER(x)                => Some(TokenType.NUMBER)
     case IDENTIFIER(x)            => Some(TokenType.IDENTIFIER)
     case x if x.trim.length() > 0 => Some(TokenType.TEXT)

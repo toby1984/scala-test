@@ -14,7 +14,9 @@ trait ICompilationContext
      
      def pushScope(scope:Scope) : Unit
      
-     def registerFunction( name : Identifier ) : Unit
+     def defineFunction( name : Identifier ): Unit
+     
+     def declareFunction( name : Identifier ): Unit
      
      def popScope() : Unit
      

@@ -4,6 +4,7 @@ public enum TokenType
 {
   EOL,
   EOF,
+  EXTERNAL,
   NUMBER,
   DOUBLE_QUOTE,
   IDENTIFIER,
