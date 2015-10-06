@@ -98,13 +98,10 @@ object ParserTest
   def main(args:Array[String]) 
   {
     val code = """val global = 42
-         def func1(a:Int) : Int
-         {
-           a + a - 3
-         }
+         external def print(msg:String) : Unit
          def main() : Unit
          {
-             func1( global )
+             print( "test" )
          }
     """
     parse( code )

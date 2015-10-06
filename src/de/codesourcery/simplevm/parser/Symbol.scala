@@ -15,4 +15,4 @@ class Symbol(val name:Identifier,val symbolType:SymbolType)
 
 class ValueSymbol(name:Identifier,symbolType:SymbolType,val node:IASTNode,val isImmutable:Boolean) extends Symbol(name,symbolType) 
 
-class LabelSymbol(name:Identifier,symbolType:SymbolType,val node:IASTNode) extends Symbol(name,symbolType) 
+class LabelSymbol(name:Identifier,symbolType:SymbolType,val node:IASTNode) extends Symbol(name,symbolType)

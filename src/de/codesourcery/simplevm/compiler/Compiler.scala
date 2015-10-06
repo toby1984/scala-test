@@ -62,31 +62,41 @@ final class Compiler
     val insBuffer = new ListBuffer[Opcode]()    
     var jmpTableIndex = 0
     val insPtrs = new HashMap[Int,Int] // key is slot index, value is pointer into instruction buffer
-    val functionToSlot = new HashMap[Identifier,Int]()
+    val labelToSlot = new HashMap[Identifier,JumpTableEntry]()
     
-    def toSeq() : Seq[Int] = 
+    def getFunctionDescriptors : Seq[FunctionDescriptor] = 
     {
-      insPtrs.toSeq.sortBy( pair => pair._1 ).map( pair => pair._2)
+      val result = new ListBuffer[FunctionDescriptor]()
+      // FunctionDescriptor(signature:FunctionSignature,slotIndex:Int,firstInstructionIdx:Int,stackLayout:Seq[VarEntry])
+      for ( i <- 0 until jmpTableIndex ) 
+      {
+        val functionStartIdx = insPtrs(i)
+        
+      }
+      result
     }
     
-    def declareFunction(name:Identifier): Unit = maybeCreateFunctionEntry(name,-1 ) // -1 is special marker for unresolved (external) function 
+    def getEntries : Seq[JumpTableEntry] = labelToSlot.values.toSeq
     
-    def defineFunction(name:Identifier): Unit = maybeCreateFunctionEntry(name,insBuffer.size)
+    def declareFunction(signature : FunctionSignature): Unit = maybeCreateFunctionEntry(signature.name,Some(signature),-1 ) // -1 is special marker for unresolved (external) function 
     
-    private[this] def maybeCreateFunctionEntry(name:Identifier,insOffset:Int) : Unit = 
+    def defineFunction(signature : FunctionSignature): Unit = maybeCreateFunctionEntry(signature.name,Some(signature),insBuffer.size)
+    
+    private[this] def maybeCreateFunctionEntry(name:Identifier,signature : Option[FunctionSignature],insOffset:Int) : Unit = 
     {
-      val slotIdx = functionToSlot.get(name) match 
+      val entry = labelToSlot.get( name ) match 
       {
         case Some(x) => x
         case None => 
         {
            val idx = jmpTableIndex
            jmpTableIndex += 1
-           functionToSlot += name -> idx
-           idx
+           val newEntry = new JumpTableEntry(name,signature,idx)
+           labelToSlot += name -> newEntry
+           newEntry
         }
       }
-      insPtrs += slotIdx -> insOffset
+      insPtrs += entry.slotIndex -> insOffset
     }
     
     def addInsn(op:Opcode) : Unit = 
@@ -98,25 +108,15 @@ final class Compiler
     protected[Compiler] def printJumpTable() 
     {
       // print jump table
-      functionToSlot.foreach( _ match { case (k,slot) => println( "Jumptable: "+k+"(...) in slot # "+slot+" starts at instruction "+insPtrs(slot)) } )
-      
-      // print instructions
-      var idx = 0
-      for ( ins <- functionToSlot ) 
-      {
-        println("Instruction "+idx+": "+ins)
-        idx += 1
-      }    
+      getEntries.sortBy( _.slotIndex ).foreach( entry => println( "Jumptable slot #"+entry.slotIndex+": "+entry.signature+" starts at instruction "+insPtrs(entry.slotIndex)) )
     }     
     
-    def slotIndex(symbol:Symbol) : Int = functionToSlot(symbol.name) 
+    def slotIndex(symbol:Symbol) : Int = labelToSlot(symbol.name).slotIndex 
            
-    def contains(symbol:Symbol) : Boolean = functionToSlot.contains( symbol.name )
+    def contains(symbol:Symbol) : Boolean = labelToSlot.contains( symbol.name )
   }
   
-  case class VarEntry(val name:Identifier,val kind:TypeName,val slotNum:Int)  
-  
-  private final class MyFrame(val scope : Scope) 
+  final class MyFrame(val scope : Scope) 
   {
      var slotIndex = 0
      val varSlots = new HashMap[Identifier,VarEntry]()
@@ -138,6 +138,8 @@ final class Compiler
          }
        }
      }   
+     
+     def varEntries : Seq[VarEntry] = varSlots.values.toSeq
      
      def hasParent : Boolean = scope.hasParent
      
@@ -169,9 +171,9 @@ final class Compiler
      
      def incPassNo() = passNo += 1
      
-     def declareFunction(name:Identifier): Unit = jumpTable.declareFunction( name )
+     def declareFunction(signature : FunctionSignature): Unit = jumpTable.declareFunction( signature )
      
-     def defineFunction(name:Identifier): Unit = jumpTable.defineFunction( name )
+     def defineFunction(signature : FunctionSignature): Unit = jumpTable.defineFunction( signature )
      
      private[this] def currentFrame : MyFrame = stack.top
      
@@ -210,29 +212,32 @@ final class Compiler
          }
      }
      
-    private[this] def topLevelFrame : MyFrame = stackFrames( Scope.GLOBAL_SCOPE_NAME )
+    def topLevelFrame : MyFrame = stackFrames( Scope.GLOBAL_SCOPE_NAME )
      
-    override def pushScope(scope: Scope): Unit =  stack.push( frameForScope( scope ) )
+    override def newStackFrame(scope: Scope): Unit =  stack.push( frameForScope( scope ) )
     
     private[this] def frameForScope(scope:Scope) : MyFrame =  stackFrames.getOrElseUpdate( scope.fullyQualifiedName ,  new MyFrame(scope) )
     
     override def currentScope: Scope = stack.top.scope
 
-    override def popScope(): Unit = stack.pop    
+    override def popStackFrame(): Unit = stack.pop    
      
-    override def registerVariable(name: Identifier, kind: TypeName): Unit = currentFrame.registerVariable( name , kind )
-    
-    def beginFunction(name:Identifier,scope:Scope) : Unit = 
+    override def registerVariable(name: Identifier, kind: TypeName): Unit = 
     {
-      currentFunction = Some(name)
-      jumpTable.defineFunction( name )
-      pushScope( scope )
+      currentFrame.registerVariable( name , kind )
+    }
+    
+    def beginFunction(signature:FunctionSignature,scope:Scope) : Unit = 
+    {
+      currentFunction = Some(signature.name)
+      jumpTable.defineFunction( signature )
+      newStackFrame( scope )
     }
      
      def endFunction() : Unit = 
      {
        currentFunction = None
-       popScope()       
+       popStackFrame()       
      }
      
     // ============ EMIT =======
@@ -304,7 +309,9 @@ final class Compiler
     ctx.stackFrames.values.foreach( printFrame )  
     
     val result = new BinaryFile()
-    result.setJumpTable( ctx.jumpTable.toSeq )
+    
+    result.setJumpTable( ctx.jumpTable.getEntries , ctx.topLevelFrame.varEntries )
+    
     result.setConstantPool( ctx.constantPool.values )
     result.setInstructions( ctx.jumpTable.insBuffer )
     
@@ -328,7 +335,7 @@ final class Compiler
   
   private[this] def findMainMethod(frame:MyFrame) : Option[FunctionDefinition] = 
   {
-    frame.scope.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER , SymbolType.FUNCTION_NAME ) match 
+    frame.scope.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER.name , SymbolType.FUNCTION_NAME ) match 
     {
       case Some(symbol) if Compiler.isMainMethod(symbol) => Some( symbol.asInstanceOf[LabelSymbol].node.asInstanceOf[FunctionDefinition] ) 
       case _ => None
@@ -350,7 +357,7 @@ final class Compiler
 
 object Compiler 
 {
-  val MAIN_METHOD_IDENTIFIER = Identifier("main")
+  val MAIN_METHOD_IDENTIFIER = new FunctionSignature(Identifier("main"),KnownTypes.UNIT)
   
   def isMainMethod(node:IASTNode) : Boolean = 
   {
@@ -377,7 +384,7 @@ object Compiler
   
   protected def isMainMethod(symbol:Symbol) : Boolean =  
   {
-    if ( symbol.symbolType == SymbolType.FUNCTION_NAME && symbol.name == MAIN_METHOD_IDENTIFIER ) 
+    if ( symbol.symbolType == SymbolType.FUNCTION_NAME && symbol.name == MAIN_METHOD_IDENTIFIER.name ) 
     {
       val n = symbol.asInstanceOf[LabelSymbol].node.asInstanceOf[FunctionDefinition]
       isMainMethod(n)

@@ -12,17 +12,17 @@ trait ICompilationContext
 {
      def currentPassNo : Int
      
-     def pushScope(scope:Scope) : Unit
+     def newStackFrame(scope:Scope) : Unit
      
-     def defineFunction( name : Identifier ): Unit
+     def popStackFrame() : Unit
      
-     def declareFunction( name : Identifier ): Unit
+     def defineFunction( signature : FunctionSignature ): Unit
      
-     def popScope() : Unit
+     def declareFunction( signature : FunctionSignature ): Unit
      
      def currentScope : Scope
      
-     def beginFunction(name:Identifier,scope:Scope) : Unit
+     def beginFunction(signature : FunctionSignature ,scope:Scope) : Unit
      
      def endFunction() : Unit
      

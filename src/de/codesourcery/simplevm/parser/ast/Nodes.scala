@@ -11,6 +11,7 @@ import de.codesourcery.simplevm.parser.KnownTypes
 import de.codesourcery.simplevm.parser.SymbolType
 import de.codesourcery.simplevm.parser.ValueSymbol
 import de.codesourcery.simplevm.parser.LabelSymbol
+import de.codesourcery.simplevm.compiler.FunctionSignature
 
 class AST extends ASTNode
 {
@@ -23,7 +24,8 @@ class AST extends ASTNode
   override def visit(ctx: ICompilationContext): Unit = 
   {
     // generate code for global variable definitions first
-    ctx.beginFunction(Identifier("__init__"), scope.get )
+    val signature = new FunctionSignature(new Identifier("__init__") , KnownTypes.UNIT )
+    ctx.beginFunction( signature , scope.get )
     val ( globalVars , rest ) = children.map( s => s.asInstanceOf[Statement] ).partition( _.isVariableDefinition )
     globalVars.foreach( _.visit(ctx) )
     getMainMethod match 
@@ -32,16 +34,16 @@ class AST extends ASTNode
       {
         println("Found main method")
         ctx.declareFunction( Compiler.MAIN_METHOD_IDENTIFIER )
-        val symbol = node.scope.get.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER , SymbolType.FUNCTION_NAME ).get        
+        val symbol = node.scope.get.getSymbol( Compiler.MAIN_METHOD_IDENTIFIER.name , SymbolType.FUNCTION_NAME ).get        
         ctx.emitJumpSubroutine( symbol.asInstanceOf[LabelSymbol] )
       }
       case None => println("No main method")
     }
     ctx.endFunction()
     
-    ctx.pushScope( scope.get )
+    ctx.newStackFrame( scope.get )
     rest.foreach( _.visit(ctx) )
-    ctx.popScope()
+    ctx.popStackFrame()
   }
   
   def getMainMethod : Option[FunctionDefinition] = filter( _.isInstanceOf[FunctionDefinition] )
@@ -203,11 +205,24 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   }
 }
 
-final class FunctionDeclaration(val name:Identifier,val returnType : TypeName,val isExternal:Boolean) extends ASTNode 
+abstract class FunctionDefOrDecl(val name:Identifier,val returnType : TypeName) extends ASTNode 
+{
+      final def signature : FunctionSignature = {
+      
+      val args = children
+        .filter( _.isInstanceOf[ParameterList] )
+        .map( _.asInstanceOf[ParameterList] )
+        .map( _.getArguments.map( arg => arg.kind ) )
+        
+      new FunctionSignature(name,args,returnType)
+    }  
+}
+
+final class FunctionDeclaration(name:Identifier,returnType : TypeName,val isExternal:Boolean) extends FunctionDefOrDecl(name,returnType) 
 {
     override def evaluate() : TypedValue = TypedValue( None , returnType )
     
-    override def visit(ctx: ICompilationContext): Unit = ctx.declareFunction( name )
+    override def visit(ctx: ICompilationContext): Unit = ctx.declareFunction( signature )
     
     override def print(depth:Int) : String = 
     {
@@ -216,7 +231,7 @@ final class FunctionDeclaration(val name:Identifier,val returnType : TypeName,va
     }    
 }
 
-final class FunctionDefinition(val name:Identifier,s:Scope,val returnType : TypeName) extends ASTNode 
+final class FunctionDefinition(name:Identifier,s:Scope,returnType : TypeName) extends FunctionDefOrDecl(name,returnType) 
 {
     override val scope = Some( s )
     
@@ -236,7 +251,7 @@ final class FunctionDefinition(val name:Identifier,s:Scope,val returnType : Type
     override def visit(ctx: ICompilationContext): Unit = 
     {
       println("== Emitting "+name+" in scope "+ctx.currentScope.name+" === ")
-      ctx.beginFunction( name , scope.get )
+      ctx.beginFunction( signature , scope.get )
       try {
         children.foreach( _.visit( ctx ) )
         ctx.emitReturn()
@@ -262,4 +277,6 @@ final class ParameterList extends ASTNode
     override def print(depth:Int) : String = "(" + children.map( _.print(0) ).mkString(",") + ")"
     
     def hasNoParameters : Boolean = hasNoChildren
+    
+    def getArguments : Seq[FunctionArgument] = children.map( _.asInstanceOf[FunctionArgument] )
 }
