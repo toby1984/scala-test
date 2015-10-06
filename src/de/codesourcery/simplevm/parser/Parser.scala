@@ -107,7 +107,7 @@ class Parser(lexer:ILexer)
            return Some( func )
          } 
          // no body => function declaration
-         val func = new FunctionDeclaration(name,returnType.get)           
+         val func = new FunctionDeclaration(name,returnType.get,isExternal)           
          func.addChildren( children )
          parentScope.defineLabel( name , SymbolType.FUNCTION_NAME , func )           
          return Some( func )

@@ -203,7 +203,7 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   }
 }
 
-final class FunctionDeclaration(val name:Identifier,val returnType : TypeName) extends ASTNode 
+final class FunctionDeclaration(val name:Identifier,val returnType : TypeName,val isExternal:Boolean) extends ASTNode 
 {
     override def evaluate() : TypedValue = TypedValue( None , returnType )
     
