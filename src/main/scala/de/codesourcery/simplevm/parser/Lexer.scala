@@ -3,7 +3,6 @@ package de.codesourcery.simplevm.parser
 import scala.collection.mutable.ArrayBuffer
 import scala.collection.mutable.ListBuffer
 import scala.collection.mutable.Stack
-import scala.util.parsing.input.Position
 
 class Lexer(protected val scanner:IScanner) extends ILexer 
 {

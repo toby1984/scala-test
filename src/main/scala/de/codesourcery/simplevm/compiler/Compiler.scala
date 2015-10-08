@@ -4,8 +4,6 @@ import de.codesourcery.simplevm.parser.ast.AST
 import de.codesourcery.simplevm.parser.ast.OperatorNode
 import de.codesourcery.simplevm.parser.OperatorType
 import de.codesourcery.simplevm.parser.ast.IASTNode
-import scala.reflect.runtime.universe._
-import scala.reflect.ClassTag
 import de.codesourcery.simplevm.parser.ast.FunctionDefinition
 import de.codesourcery.simplevm.parser.ast.ParameterList
 import de.codesourcery.simplevm.parser.ast.FunctionArgument

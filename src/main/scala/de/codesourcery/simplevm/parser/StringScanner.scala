@@ -1,7 +1,6 @@
 package de.codesourcery.simplevm.parser
 
 import scala.collection.mutable.ListBuffer
-import scala.util.parsing.input.Position
 
 class StringScanner(protected val text:String) extends IScanner 
 {   

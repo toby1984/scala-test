@@ -1,7 +1,5 @@
 package de.codesourcery.simplevm.parser
 
-import scala.util.parsing.input.Position
-
 sealed case class TextRegion(offset:Int,length:Int) {
   
   def start : Int = offset

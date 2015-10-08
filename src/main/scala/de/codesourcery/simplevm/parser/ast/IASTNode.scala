@@ -1,7 +1,6 @@
 package de.codesourcery.simplevm.parser.ast
 
 import de.codesourcery.simplevm.parser.Scope
-import scala.reflect.api._
 import de.codesourcery.simplevm.compiler.ICompilationParticipant
 
 trait IASTNode extends Iterable[IASTNode] with ICompilationParticipant
