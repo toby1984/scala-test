@@ -25,6 +25,8 @@ import de.codesourcery.simplevm.parser.SymbolType
 import de.codesourcery.simplevm.parser.ast.FunctionDefinition
 import java.io.ByteArrayOutputStream
 import java.io.ByteArrayInputStream
+import java.io.FileOutputStream
+import java.io.File
 
 final class Compiler 
 { 
@@ -326,11 +328,15 @@ final class Compiler
     val test = new ByteArrayOutputStream
     result.writeTo( test )
     
-    val result2 = BinaryFile.readFrom( new ByteArrayInputStream( test.toByteArray() ) )
+    val fileOut = new FileOutputStream( new File("/tmp/debug") )
+    fileOut.write( test.toByteArray() )
+    fileOut.close()
     
     println("====================")
     println("==== Read file =====")
     println("====================")
+    
+    val result2 = BinaryFile.readFrom( new ByteArrayInputStream( test.toByteArray() ) )
 
     printConstantPool( result2.getConstantPool() )
     val jumpTable = result2.getJumpTable()

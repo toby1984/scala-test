@@ -26,6 +26,7 @@ import java.io.ByteArrayOutputStream
 import java.io.PrintWriter
 import java.awt.event.ActionListener
 import java.awt.event.ActionEvent
+import de.codesourcery.simplevm.vm.VirtualMachine
 
 object ParserTest 
 {
@@ -77,7 +78,8 @@ object ParserTest
       val ast = parser.parse()
       treeModel.setModelObject( ast )
   
-      new Compiler().compile( ast )
+      val binary = new Compiler().compile( ast )
+      new VirtualMachine( binary ).run()
       
       errorMessages.setText( null )
     } 
@@ -98,10 +100,11 @@ object ParserTest
   def main(args:Array[String]) 
   {
     val code = """
+         val a = 10
          external def print(msg:String) : Unit
          def main() : Unit
          {
-             print( "test" )
+             print( "Hello,world!" )
          }
     """
     parse( code )

@@ -9,6 +9,8 @@ import de.codesourcery.simplevm.compiler.Compiler
 import scala.collection.mutable.Stack
 import scala.collection.mutable.ListBuffer
 import de.codesourcery.simplevm.parser.Identifier
+import de.codesourcery.simplevm.compiler.FunctionSignature
+import de.codesourcery.simplevm.parser.KnownTypes
 
 class VirtualMachine(file:BinaryFile) 
 {
@@ -36,13 +38,15 @@ class VirtualMachine(file:BinaryFile)
   
   def run() : Unit = 
   {
+    println("Executing program ...")
+    
     // execute init method, this method will JSR to main() if it's present
-    val initMethodSlotIdx = jumpTableEntries.filter( entry => entry.signature == Compiler.INIT_METHOD_IDENTIFIER ).headOption.map( _.slotIndex )
+    val initMethodSlotIdx = jumpTableEntries.filter( entry => entry.signature.isDefined && entry.signature.get == Compiler.INIT_METHOD_IDENTIFIER ).headOption.map( _.slotIndex )
     if ( ! initMethodSlotIdx.isDefined ) 
     {
       throw new RuntimeException("No __init__ method ??")
     }
-    jumpToSubroutine( initMethodSlotIdx.get )
+    instructionPtr = initMethodSlotIdx.get
     execute()
   }
   
@@ -53,8 +57,11 @@ class VirtualMachine(file:BinaryFile)
        throw new RuntimeException("enterMethod() called for non-function ??")
      }
      
+//     println("Jumping to subroutine "+signature.get)
+     
      if ( jumpTablePtrs( slotIdx ) == -1 ) { // unresolved method, see if it's part of the runtime library
-       
+       executeBuiltinFunction( signature.get )
+       return
      }
      
      // set framepointer so that framePointer[0] is the first method argument
@@ -74,25 +81,26 @@ class VirtualMachine(file:BinaryFile)
     instructionPtr = jumpTablePtrs( slotIdx )
   }
   
-  private[this] def executeBuiltinFunction(slotIdx:Int) : Unit = 
+  private[this] def executeBuiltinFunction(signature:FunctionSignature) : Unit = 
   {
-      val signature = jumpTableEntries(slotIdx).signature
-      if ( signature.get.name == Identifier("print") ) 
+      if ( signature.name == Identifier("print") && signature.argumentCount == 1 && signature.returnType == KnownTypes.UNIT ) 
       {
-        println( "print( "+pop()+")" )  
+        println( pop() )  
+        return
       } 
-      else 
-      {
-        throw new RuntimeException("Unknown function: "+signature.get)
-      }
+      throw new RuntimeException("Attempted call to unresolved function: "+signature)
   }
   
-  private[this] def exitMethod() : Unit = 
+  private[this] def exitMethod() : Boolean = 
   {
+    if ( callStackPtr == 0 ) {
+      return false
+    }
     callStackPtr -= 1
     instructionPtr = callStack( callStackPtr )
     
     framePointer = framePointerStack.pop()
+    true
   }
   
   private[this] def execute() : Unit = 
@@ -101,6 +109,7 @@ class VirtualMachine(file:BinaryFile)
     do 
     {
       val currentIns = instructions(instructionPtr)
+//      println("EXECUTING @ "+instructionPtr+" => "+currentIns)
       instructionPtr += 1
       continue = execute( currentIns )
     } while ( continue )
@@ -124,18 +133,6 @@ class VirtualMachine(file:BinaryFile)
   
   private[this] def execute( ins:Opcode) : Boolean  = 
   {
-   /*
-   def LOAD_CONST(slotIndex:Int) : Opcode = new Opcode(1,"LOAD_CONST #"+slotIndex,slotIndex) 
-   val POP : Opcode = new Opcode(2,"POP")
-   def STORE_STACK(slotIndex:Int) : Opcode = new Opcode(3,"STORE_STACK #"+slotIndex,slotIndex)
-   def STORE_HEAP(slotIndex:Int) : Opcode = new Opcode(4,"STORE_HEAP #"+slotIndex,slotIndex)
-   val ADD : Opcode = new Opcode(5,"ADD")
-   val SUB : Opcode = new Opcode(6,"SUB")
-   val RETURN : Opcode = new Opcode(7,"RETURN")
-   def JSR(slotIndex:Int) : Opcode = new Opcode(8,"JSR #"+slotIndex,slotIndex) 
-   def LOAD_STACK(slotIndex:Int) : Opcode = new Opcode(9,"LOAD_STACK #"+slotIndex,slotIndex)
-   def LOAD_HEAP(slotIndex:Int) : Opcode = new Opcode(10,"LOAD_HEAP #"+slotIndex,slotIndex)    
-    */
     val slotIdx = ins.slotIndex
     ins.opcode match 
     {
@@ -145,7 +142,7 @@ class VirtualMachine(file:BinaryFile)
       case 4 => globalVars( slotIdx )=pop() // STORE_HEAP
       case 5 => push( pop().asInstanceOf[Number].longValue() + pop().asInstanceOf[Number].longValue() ) // ADD
       case 6 => push( pop().asInstanceOf[Number].longValue() - pop().asInstanceOf[Number].longValue() ) // SUB
-      case 7 => exitMethod() // RETURN
+      case 7 => return exitMethod() // RETURN
       case 8 => jumpToSubroutine( slotIdx ) // JSR
       case 9 => push( readStackVariable( slotIdx ) ) // LOAD_STACK
       case 10 => push( globalVars( slotIdx ) ) // LOAD_HEAP
