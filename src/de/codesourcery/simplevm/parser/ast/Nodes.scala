@@ -24,10 +24,11 @@ class AST extends ASTNode
   override def visit(ctx: ICompilationContext): Unit = 
   {
     // generate code for global variable definitions first
-    val signature = new FunctionSignature(new Identifier("__init__") , KnownTypes.UNIT )
-    ctx.beginFunction( signature , scope.get )
+    ctx.beginFunction( Compiler.INIT_METHOD_IDENTIFIER  , scope.get )
     val ( globalVars , rest ) = children.map( s => s.asInstanceOf[Statement] ).partition( _.isVariableDefinition )
     globalVars.foreach( _.visit(ctx) )
+    
+    // init function redirects to main() method
     getMainMethod match 
     {
       case Some(node) => 
@@ -39,6 +40,7 @@ class AST extends ASTNode
       }
       case None => println("No main method")
     }
+    ctx.emitReturn() // return from init()
     ctx.endFunction()
     
     ctx.newStackFrame( scope.get )

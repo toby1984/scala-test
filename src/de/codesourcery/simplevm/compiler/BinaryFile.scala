@@ -12,6 +12,7 @@ import java.io.ByteArrayInputStream
 import de.codesourcery.simplevm.parser.TypeName
 import de.codesourcery.simplevm.compiler.Compiler._
 import de.codesourcery.simplevm.parser.Identifier
+import de.codesourcery.simplevm.Misc
 
 class BinaryFile 
 {
@@ -27,25 +28,41 @@ class BinaryFile
    * frames     - Stack frames for each method 
    */
   
-  def setJumpTable(entries:Seq[JumpTableEntry] , globalVars:Seq[VarEntry ]) : Unit = 
+  def setJumpTable(stackFrames : Seq[Compiler#VariablesTable] , instructionPtrs:Seq[Int] , descriptors:Seq[JumpTableEntry] , globalVars:Compiler#VariablesTable) : Unit = 
   {
     addChunk(ChunkType.JUMP_TABLE) 
     {
-      ser => {
-        ser.writeInt( entries.size )
-        entries.foreach( ser.writeJumpTableEntry )
-        ser.writeVarEntries( globalVars )
+      ser => 
+        {
+          ser.writeInt( stackFrames.size )
+          for ( varTable <- stackFrames ) 
+          {
+            ser.writeVarEntries( varTable.sortedEntries )
+          }
+          ser.writeIntArray( instructionPtrs )
+          ser.writeInt( descriptors.size )
+          descriptors.foreach( ser.writeJumpTableEntry )
+          ser.writeVarEntries( globalVars.varSlots.values.toSeq )
       }
     }
   }
   
-  def getJumpTable() : (Seq[JumpTableEntry],Seq[VarEntry]) = 
+  def getJumpTable() : (Seq[Seq[VarEntry]],Seq[Int],Seq[JumpTableEntry],Seq[VarEntry]) = 
   {
-    readChunk(ChunkType.JUMP_TABLE) { ser =>
-      val len = ser.readInt()
-      val entries = for ( i <- 0 until len ) yield ser.readJumpTableEntry()
-      val globalVars = ser.readVarEntries()
-      (entries,globalVars)
+    readChunk(ChunkType.JUMP_TABLE) { ser => 
+      {
+        val stackFrames = new ListBuffer[Seq[VarEntry]]()
+        val stackFrameCount = ser.readInt()
+        for ( i <- 0 until stackFrameCount ) 
+        {
+          stackFrames += ser.readVarEntries()
+        }
+        val instructionPtrs = ser.readIntArray()
+        val len = ser.readInt()
+        val descriptors = for ( i <- 0 until len ) yield ser.readJumpTableEntry()
+        val globalVars = ser.readVarEntries()
+        (stackFrames,instructionPtrs , descriptors,globalVars)
+      }
     }
   }
   
@@ -53,7 +70,12 @@ class BinaryFile
   {
     addChunk(ChunkType.CONSTANT_POOL) 
     {
-      ser => constants.foreach( ser.writeConstantEntry )  
+      ser => 
+        {
+          println("Writing "+constants.size+" constant entries")
+          ser.writeInt( constants.size )
+          constants.foreach( ser.writeConstantEntry )  
+        }
     }    
   }
   
@@ -61,31 +83,38 @@ class BinaryFile
   {
     readChunk( ChunkType.CONSTANT_POOL) 
     { 
-      ser =>
-      val result = ListBuffer[ConstantEntry]()
-      for ( ser <- ser.readConstantEntry() ) {
-        result += ser
+      ser => 
+      {
+    	  val count = ser.readInt()
+    	  println("Reading "+count+" constant entries")
+        for ( i <- 0 until count ) yield  ser.readConstantEntry()
       }
-      result
     }
   }
   
-  def readChunk[T](kind:ChunkType)( func: Serializer => T) : T = {
-    val chunk = getChunk( kind )
-    val ser = new Serializer(null,chunk.asInputStream)
-    func(ser)
+  private[this] def readChunk[T](kind:ChunkType)( func: Serializer => T) : T = 
+  {
+    println("Trying to read chunk "+kind+" ...")
+    func( new Serializer(null,getChunk( kind ).asInputStream) )
   }
   
-  def getChunk(kind:ChunkType) : Chunk = chunks.filter( t => t.kind == kind ).head
+  private[this] def getChunk(kind:ChunkType) : Chunk = 
+  {
+    chunks.filter( t => t.kind == kind ).headOption match {
+      case Some(x) => x
+      case None => throw new RuntimeException("Failed to find chunk "+kind+" in file");
+    }
+  }
 
   def setInstructions(instructions:Seq[Opcode]) : Unit = 
   {
-    val out = new ListBuffer[Int]()
-    instructions.foreach( _.append( out ) )
-    
     addChunk(ChunkType.INSTRUCTIONS) 
     {
-      ser => ser.writeIntArray( out )
+    	ser => {
+    		val out = new ListBuffer[Int]()
+    	  ser.writeIntArray( out )
+        instructions.foreach( ins => out += ins.toBinary() )
+    	}
     }    
   }
   
@@ -107,16 +136,18 @@ class BinaryFile
      chunks.sortBy( chunk => chunk.kind.getTypeId ).foreach( _.writeTo( ser ) )
   }
   
-  private[this] def addChunk( kind:ChunkType)(func : Serializer => Unit ) : Unit = 
+  private[this] def addChunk(kind:ChunkType)(func : Serializer => Unit ) : Unit = 
   {
+    println("Adding chunk "+kind)
     val chunk = new Chunk( kind , FILE_VERSION )
     val out = new ByteArrayOutputStream
     val serializer = new Serializer(out,null)
+    func(serializer)
     chunk.data = out.toByteArray()
     replaceOrAdd(chunk)
   }
   
-  def addChunk( chunk : Chunk) : Unit = 
+  private[BinaryFile] def addChunk( chunk : Chunk) : Unit = 
   {
      if ( chunks.exists( _.kind == chunk.kind ) ) {
        throw new IllegalArgumentException("Duplicate chunk "+chunk)
@@ -147,10 +178,11 @@ class Chunk(val kind:ChunkType,val version:Int)
    
    def writeTo(ser:Serializer) : Unit = 
    {
-       ser.writeInt( kind.getTypeId() )
-       ser.writeInt( version )
-       ser.writeInt( data.length )
-       ser.writeByteArray( data )
+     println(" Writing chunk "+kind+" with ID "+kind.getTypeId+" , version "+version+" and length "+data.length)
+     ser.writeByte( kind.getTypeId().asInstanceOf[Byte] )
+     ser.writeInt( version )
+     ser.writeInt( data.length )
+     ser.writeByteArray( data )
    }
    
    def asInputStream : InputStream = new ByteArrayInputStream(data)
@@ -160,12 +192,16 @@ object Chunk
 {
   def readFrom(ser:Serializer) : Option[Chunk] = 
   {
-     val chunkType = ChunkType.fromTypeId( ser.readInt() )
-     if ( chunkType != -1 ) 
+     val chunkTypeId = ser.unsafeReadByte()
+     if ( chunkTypeId != -1 ) 
      {
+    	 val chunkType = ChunkType.fromTypeId( chunkTypeId )
+    	 println("File contains chunk "+chunkType)
+    	 
        val version = ser.readInt()
        val result = new Chunk( chunkType , version)
        val len = ser.readInt()
+       println("Reading "+len+" bytes")
        result.data = ser.readByteArray(len)
        Some(result)
      } else {
@@ -180,9 +216,7 @@ object BinaryFile
   {
     val ser = new Serializer(null,in)
     val result = new BinaryFile()
-    for ( chunk <- Chunk.readFrom(ser) ) {
-      result.addChunk(chunk)
-    }
+    Misc.repeatUntilNone( Chunk.readFrom(ser) ).foreach( result.addChunk( _ ) )
     result
   }
 }
@@ -305,6 +339,8 @@ protected class Serializer(output: OutputStream,input:InputStream)
     entries.sortBy(entry => entry.slotNum ).foreach( writeVarEntry )
   }
   
+  def unsafeReadByte() : Int = input.read()
+  
   private[this] def writeVarEntry( entry : VarEntry ) : Unit = 
   {
     writeString( entry.name.name )
@@ -325,7 +361,11 @@ protected class Serializer(output: OutputStream,input:InputStream)
   def writeByteArray(value:Seq[Byte]) : Unit =
   {
     writeInt( value.length )
-    value.foreach( output.write( _ ) )
+    output.write( value.toArray )
+  }
+  
+  def writeByte(value:Byte) : Unit = {
+    output.write( value )
   }
   
   def writeInt(value:Int) : Unit = 
@@ -336,6 +376,8 @@ protected class Serializer(output: OutputStream,input:InputStream)
     output.write( value & 0xff )
   }
   
+  def readInt() : Int = ( readSafely() << 24 | readSafely() << 16 | readSafely() << 8 | readSafely() )
+  
   def readByteArray(len:Int) : Array[Byte] = 
   {
     val result = new Array[Byte](len)
@@ -345,22 +387,12 @@ protected class Serializer(output: OutputStream,input:InputStream)
     result
   }
   
-  def readInt() : Int = 
-  {
-    var result = readSafely() << 8
-    result = (result | readSafely() ) << 8
-    result = (result | readSafely() ) << 8
-    result = (result | readSafely() )    
-    result
-  }
+  private def readUnsafe() : Int = input.read()
   
-  private[this] def readSafely() : Int = 
+  private[this] def readSafely() : Int = readUnsafe() match 
   {
-    val tmp = readInt()
-    if ( tmp == -1 ) {
-      throw new EOFException()
-    }   
-    tmp
+    case -1 => throw new EOFException()
+    case x => x
   }
   
   def writeConstantEntry(entry:ConstantEntry) : Unit = 
@@ -371,25 +403,6 @@ protected class Serializer(output: OutputStream,input:InputStream)
       case KnownTypes.INTEGRAL => writeInt( entry.value.asInstanceOf[Number].intValue() )
       case KnownTypes.STRING =>  writeString( entry.value.asInstanceOf[String] )
       case _ => throw new RuntimeException("Unhandled constant type: "+entry.kind)
-    }
-  }
-  
-  def readConstantEntry() : Option[ ConstantEntry ] = 
-  {
-    val typeId = input.read()
-    if ( typeId == -1 ) {
-      None
-    }
-    else 
-    {
-      val kind = fromTypeId( typeId )  
-      val value = kind match 
-      {
-        case KnownTypes.INTEGRAL => readInt()
-        case KnownTypes.STRING => readString()
-        case _ => throw new RuntimeException("Unhandled constant type: "+kind)
-      }
-      Some( ConstantEntry(value,kind) )
     }
   }
   
@@ -410,6 +423,19 @@ protected class Serializer(output: OutputStream,input:InputStream)
       case 1 => KnownTypes.STRING
       case _ => throw new RuntimeException("Unhandled ConstantEntry type ID: "+typeId)
     }
+  }  
+  
+  def readConstantEntry() : ConstantEntry = 
+  {
+    val typeId = input.read()
+    val kind = fromTypeId( typeId )  
+    val value = kind match 
+    {
+      case KnownTypes.INTEGRAL => readInt()
+      case KnownTypes.STRING => readString()
+      case _ => throw new RuntimeException("Unhandled constant type: "+kind)
+    }
+    ConstantEntry(value,kind)
   }
   
   def readString() : String = 

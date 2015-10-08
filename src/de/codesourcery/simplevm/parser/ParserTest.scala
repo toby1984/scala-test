@@ -97,7 +97,7 @@ object ParserTest
   
   def main(args:Array[String]) 
   {
-    val code = """val global = 42
+    val code = """
          external def print(msg:String) : Unit
          def main() : Unit
          {

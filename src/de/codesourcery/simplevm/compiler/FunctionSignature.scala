@@ -5,12 +5,14 @@ import de.codesourcery.simplevm.parser.TypeName
 import java.util.regex.Pattern
 import scala.collection.mutable.ListBuffer
 
-sealed case class FunctionSignature(val name:Identifier,val params:Seq[ Seq[TypeName] ],val returnType:TypeName) 
+sealed case class FunctionSignature(val name:Identifier,params:Seq[ Seq[TypeName] ],val returnType:TypeName) 
 {  
   def this(name:Identifier,returnType:TypeName) 
   {
     this(name,List[Seq[TypeName]](),returnType)
   }
+  
+  val argumentCount = params.size
   
   def getAsString() : String = 
   {
