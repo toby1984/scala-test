@@ -7,69 +7,42 @@ import scala.collection.mutable.ListBuffer
 import java.io.ByteArrayOutputStream
 import de.codesourcery.simplevm.parser.KnownTypes
 import java.io.EOFException
-import de.codesourcery.simplevm.compiler.BinaryFile._
+import de.codesourcery.simplevm.compiler.Executable._
 import java.io.ByteArrayInputStream
 import de.codesourcery.simplevm.parser.TypeName
 import de.codesourcery.simplevm.compiler.Compiler._
 import de.codesourcery.simplevm.parser.Identifier
 import de.codesourcery.simplevm.Misc
 
-class BinaryFile 
+class Executable 
 {
   private[this] val FILE_VERSION = 1
   
   private val chunks = new ListBuffer[Chunk]()
   
-  /**
-   * 
-   * jumpTable  - list of indexes into the instruction/opcode area, pointing to the start of each function
-   *              If an index is -1 , this is an external function that needs to be resolved by the VM during runtime
-   * signatures - list of function signatures for each jumpTable entry (first jumpTable entry belongs to first signature, second entry to second signature,etc.)
-   * frames     - Stack frames for each method 
-   */
+  def setStackFrames(stackFrames:Seq[Compiler#VariablesTable]) : Unit =  addChunk(ChunkType.STACK_FRAMES) { ser => ser.writeArray( stackFrames )( x => ser.writeVarEntries( x.sortedEntries ) ) }
   
-  def setJumpTable(stackFrames : Seq[Compiler#VariablesTable] , instructionPtrs:Seq[Int] , descriptors:Seq[JumpTableEntry] , globalVars:Compiler#VariablesTable) : Unit = 
-  {
-    addChunk(ChunkType.JUMP_TABLE) 
-    {
-      ser => 
-      {
-        ser.writeArray( descriptors )( ser.writeJumpTableEntry ) 
-        ser.writeArray( stackFrames )( x => ser.writeVarEntries( x.sortedEntries ) )
-        ser.writeIntArray( instructionPtrs )
-        ser.writeVarEntries( globalVars.varSlots.values.toSeq )
-      }
-    }
-  }
+  def getStackFrames() : Seq[Seq[VarEntry]] = readChunk(ChunkType.STACK_FRAMES) { ser => ser.readArray( ser.readVarEntries ) }    
   
-  def getJumpTable() : (Seq[Seq[VarEntry]],Seq[Int],Seq[JumpTableEntry],Seq[VarEntry]) = 
-  {
-    readChunk(ChunkType.JUMP_TABLE) { ser => 
-      {
-        val descriptors = ser.readArray( ser.readJumpTableEntry ).sortBy( entry => entry.slotIndex )
-        val stackFrames = ser.readArray( ser.readVarEntries )
-        val instructionPtrs = ser.readIntArray()
-        val globalVars = ser.readVarEntries()
-        (stackFrames,instructionPtrs , descriptors,globalVars)
-      }
-    }
-  }
+  def setInstructionPointers(pointers:Seq[Int]) : Unit = addChunk(ChunkType.INSTRUCTION_POINTERS) { ser => ser.writeIntArray( pointers) }
   
-  def setConstantPool(constants:Seq[ConstantEntry]) : Unit = 
-  {
-    addChunk(ChunkType.CONSTANT_POOL) 
-    {
-      ser => ser.writeArray( constants )( ser.writeConstantEntry )
-    }    
-  }
+  def getInstructionsPointers() : Seq[Int] = readChunk( ChunkType.INSTRUCTION_POINTERS ) { ser => ser.readIntArray() }
   
-  def getConstantPool() : Seq[ConstantEntry] = 
-  {
-    readChunk( ChunkType.CONSTANT_POOL) 
-    { 
-      ser => ser.readArray( ser.readConstantEntry )
-    }
-  }
+  def setInstructions(instructions:Seq[Opcode]) : Unit = addChunk(ChunkType.INSTRUCTIONS) { ser => ser.writeIntArray( instructions.map( _.toBinary() ) ) }
+  
+  def getInstructions() : Seq[Opcode] = readChunk( ChunkType.INSTRUCTIONS ) { ser => Opcode.read( ser.readIntArray() ) }
+  
+	def setJumpTableEntries(descriptors:Seq[JumpTableEntry]) : Unit =  addChunk(ChunkType.JUMP_TABLE) { ser => ser.writeArray( descriptors )( ser.writeJumpTableEntry ) }
+	
+	def getJumpTableEntries() : Seq[JumpTableEntry] = readChunk(ChunkType.JUMP_TABLE) { ser => ser.readArray( ser.readJumpTableEntry ).sortBy( entry => entry.slotIndex ) }
+  
+	def setGlobalVariables(globalVars : Compiler#VariablesTable) : Unit = addChunk(ChunkType.GLOBAL_VARIABLES_MAP) { ser => ser.writeVarEntries( globalVars.varSlots.values.toSeq ) }
+	
+  def getGlobalVariables() : Seq[VarEntry] = readChunk(ChunkType.GLOBAL_VARIABLES_MAP) { ser =>  ser.readVarEntries() }
+  
+  def setConstantPool(constants:Seq[ConstantEntry]) : Unit = addChunk(ChunkType.CONSTANT_POOL) { ser => ser.writeArray( constants )( ser.writeConstantEntry ) }
+  
+  def getConstantPool() : Seq[ConstantEntry] = readChunk( ChunkType.CONSTANT_POOL) { ser => ser.readArray( ser.readConstantEntry ) }
   
   private[this] def readChunk[T](kind:ChunkType)( func: Serializer => T) : T = 
   {
@@ -87,27 +60,12 @@ class BinaryFile
     }
   }
   
-  private[this] def getChunk(kind:ChunkType) : Chunk = 
+  private[this] def getChunk(kind:ChunkType) : Chunk = chunks.filter( t => t.kind == kind ).headOption match 
   {
-    chunks.filter( t => t.kind == kind ).headOption match {
-      case Some(x) => x
-      case None => throw new RuntimeException("Failed to find chunk "+kind+" in file");
-    }
+    case Some(x) => x
+    case None => throw new RuntimeException("Failed to find chunk "+kind+" in file");
   }
 
-  def setInstructions(instructions:Seq[Opcode]) : Unit = 
-  {
-    addChunk(ChunkType.INSTRUCTIONS) 
-    {
-    	ser => ser.writeIntArray( instructions.map( _.toBinary() ) )
-    }
-  }
-  
-  def getInstructions() : Seq[Opcode] = 
-  {
-    readChunk( ChunkType.INSTRUCTIONS ) { ser => Opcode.read( ser.readIntArray() ) }
-  }
-  
   def writeTo(out:OutputStream) : Unit =
   {
      if ( ! chunks.exists( _.kind == ChunkType.FILE_HEADER) ) 
@@ -133,7 +91,7 @@ class BinaryFile
     chunk
   }
   
-  private[BinaryFile] def addChunk( chunk : Chunk) : Unit = 
+  private[Executable] def addChunk( chunk : Chunk) : Unit = 
   {
      if ( chunks.exists( _.kind == chunk.kind ) ) {
        throw new IllegalArgumentException("Duplicate chunk "+chunk)
@@ -169,7 +127,7 @@ final class Chunk(val kind:ChunkType,val version:Int)
      ser.writeByteArray( data )
    }
    
-   def toHexDump : String = BinaryFile.toHexDump( this.data )
+   def toHexDump : String = Executable.toHexDump( this.data )
    
    override def toString() : String = "Chunk "+kind+", version "+version+" , length "+data.length
    
@@ -208,12 +166,12 @@ object Chunk
   }
 }
 
-object BinaryFile 
+object Executable 
 {
-  def readFrom(in:InputStream) : BinaryFile = 
+  def readFrom(in:InputStream) : Executable = 
   {
     val ser = new Serializer(null,in)
-    val result = new BinaryFile()
+    val result = new Executable()
     Misc.repeatUntilNone( Chunk.readFrom(ser) ).foreach( result.addChunk( _ ) )
     result
   }

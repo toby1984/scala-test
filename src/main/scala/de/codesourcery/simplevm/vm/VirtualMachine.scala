@@ -1,6 +1,6 @@
 package de.codesourcery.simplevm.vm
 
-import de.codesourcery.simplevm.compiler.BinaryFile
+import de.codesourcery.simplevm.compiler.Executable
 import de.codesourcery.simplevm.compiler.VarEntry
 import de.codesourcery.simplevm.compiler.JumpTableEntry
 import de.codesourcery.simplevm.compiler.Opcode
@@ -12,7 +12,7 @@ import de.codesourcery.simplevm.parser.Identifier
 import de.codesourcery.simplevm.compiler.FunctionSignature
 import de.codesourcery.simplevm.parser.KnownTypes
 
-class VirtualMachine(file:BinaryFile) 
+class VirtualMachine(file:Executable) 
 {
   val MAX_DATA_STACK_SIZE : Int = 255
 	val MAX_CALL_STACK_SIZE : Int = 255
@@ -20,11 +20,11 @@ class VirtualMachine(file:BinaryFile)
   val constantPool : Seq[ConstantEntry] = file.getConstantPool()
   val instructions : Seq[Opcode] = file.getInstructions()
   
-  val stackFrames : Seq[Seq[VarEntry]] = file.getJumpTable()._1
-  val jumpTablePtrs : Seq[Int] = file.getJumpTable()._2
-  val jumpTableEntries : Seq[JumpTableEntry] = file.getJumpTable()._3
+  val stackFrames : Seq[Seq[VarEntry]] = file.getStackFrames()
+  val jumpTablePtrs : Seq[Int] = file.getInstructionsPointers()
+  val jumpTableEntries : Seq[JumpTableEntry] = file.getJumpTableEntries()
   
-  val globalVarMap : Seq[VarEntry] = file.getJumpTable()._4
+  val globalVarMap : Seq[VarEntry] = file.getGlobalVariables()
   val globalVars = new Array[Any](globalVarMap.size)
   
   private[this] var framePointer = 0

@@ -9,7 +9,7 @@ class StringScanner(protected val text:String) extends IScanner
   override def eof: Boolean = index >= text.length
 
   override def offset: Int = index
-
+  
   override def next(): Char = 
   { 
     val c = text.charAt( index )

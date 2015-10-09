@@ -78,10 +78,9 @@ final class Compiler
       result
     }
     
-    def getEntries : ( Seq[VariablesTable] , Seq[Int] , Seq[JumpTableEntry] ) = 
-    {
-      ( stackFrames ,  insPtrs.toSeq.sortBy( _._1 ).map( _._2 )  , labelToSlot.values.toSeq )
-    }
+    def getJumpTableEntries() : Seq[JumpTableEntry ] = labelToSlot.values.toSeq
+    
+    def getSortedInstructionPointers() : Seq[Int] = insPtrs.toSeq.sortBy( _._1 ).map( _._2 )
     
     def declareFunction(signature : FunctionSignature,scope:VariablesTable): Unit = maybeCreateFunctionEntry(signature.name,Some(signature),-1 , scope ) // -1 is special marker for unresolved (external) function 
     
@@ -300,7 +299,7 @@ final class Compiler
     nodes.filter( _.getClass == clazz ).map( _.asInstanceOf[ T ] )
   }
   
-  def compile( ast : AST) : BinaryFile =
+  def compile( ast : AST) : Executable =
   {
     validate( ast )
      
@@ -311,15 +310,19 @@ final class Compiler
    
     // print constant pool entries
     printConstantPool( ctx.constantPool.values )
+    
     // print jump table
-    printJumpTable( ctx.jumpTable.getEntries._3 , ctx.jumpTable.insPtrs.toSeq.sortBy( _._1 ).map( _._2 ) )
+    printJumpTable( ctx.jumpTable.getJumpTableEntries() , ctx.jumpTable.getSortedInstructionPointers() )
+    
     // print stack frames
-    ctx.jumpTable.getEntries._1.foreach( table => printFrame(table.sortedEntries , table.slotIndex ) ) 
+    ctx.jumpTable.stackFrames.foreach( table => printFrame(table.sortedEntries , table.slotIndex ) ) 
     
-    val result = new BinaryFile()
+    val result = new Executable()
     
-    val jmp = ctx.jumpTable.getEntries 
-    result.setJumpTable( jmp._1 , jmp._2 , jmp._3 , ctx.topLevelFrame )
+    result.setStackFrames( ctx.jumpTable.stackFrames )
+    result.setInstructionPointers( ctx.jumpTable.getSortedInstructionPointers() )
+    result.setJumpTableEntries(  ctx.jumpTable.labelToSlot.values.toSeq )
+    result.setGlobalVariables( ctx.topLevelFrame )
     result.setConstantPool( ctx.constantPool.values )
     result.setInstructions( ctx.jumpTable.insBuffer )
     
@@ -334,14 +337,15 @@ final class Compiler
     println("==== Read file =====")
     println("====================")
     
-    val result2 = BinaryFile.readFrom( new ByteArrayInputStream( test.toByteArray() ) )
+    val result2 = Executable.readFrom( new ByteArrayInputStream( test.toByteArray() ) )
 
     printConstantPool( result2.getConstantPool() )
-    val jumpTable = result2.getJumpTable()
+    
     // print jump table
-    printJumpTable( jumpTable._3 , jumpTable._2 )
+    printJumpTable( result2.getJumpTableEntries() , result2.getInstructionsPointers() )
+    
     // print stack frames
-    var stackFrames = jumpTable._1
+    var stackFrames = result2.getStackFrames()
     for ( idx <- 0 until stackFrames.size ) {
        printFrame( stackFrames(idx) , idx )
     }

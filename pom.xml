@@ -7,8 +7,8 @@
   <name>Demo of maven for Scala Lang website</name>
   <url>http://scala-lang.org</url>
   <properties>
-    <scala.version>2.12.0-M2</scala.version>
-    <!-- <scala.version>2.11.7</scala.version> -->
+<!--    <scala.version>2.12.0-M2</scala.version> -->
+    <scala.version>2.11.7</scala.version>
   </properties>
   <repositories>
     <repository>

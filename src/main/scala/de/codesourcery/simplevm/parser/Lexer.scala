@@ -10,7 +10,6 @@ class Lexer(protected val scanner:IScanner) extends ILexer
   private[this] val IDENTIFIER = "^([a-zA-Z][_a-zA-Z0-9]*)$".r;
   
   protected val tokens = new ArrayBuffer[Token]
-  private[this] val buffer = new java.lang.StringBuilder
   
   override def eof : Boolean = peek.isEOF
   
@@ -31,104 +30,90 @@ class Lexer(protected val scanner:IScanner) extends ILexer
   private[this] def parse() 
   {
     var offset = scanner.offset
+    val buffer = new java.lang.StringBuilder
+    while( ! scanner.eof && isWhitespace( scanner.peek ) ) {
+      scanner.next()
+    }
     while ( ! scanner.eof && tokens.isEmpty ) 
     {
       val c = scanner.next()
       if ( isNoWhitespace( c ) ) 
-      {
-        getTerminalType( c ) match 
+      {        
+        if ( OperatorType.isValidOperator( c ) ) 
         {
-          case Some(tt) => 
-          {
-            parseBuffer(offset)
-            offset = scanner.offset
-            tokens += Token( c , tt , TextRegion( offset-1 , 1 ) ) 
+          parseBuffer( buffer , offset )
+          offset = scanner.offset-1
+          buffer.append( c )
+          while ( ! scanner.eof && OperatorType.isValidOperator( buffer.toString()+scanner.peek ) ) {
+            buffer.append( scanner.next() )
           }
-          case None => buffer.append( c )
+          val tok = buffer.toString
+          tokens += Token( tok ,TokenType.OPERATOR, TextRegion(offset,tok.length() ) )
+          return
+        } 
+        val tt = getTerminalType(c)
+        if ( tt != null ) 
+        {
+            parseBuffer(buffer , offset)
+            tokens += Token( c , tt , TextRegion( scanner.offset-1 , 1 ) )
+            return
         }
-      } else {
-        parseBuffer(offset)
-        offset = scanner.offset
+        buffer.append( c )
+      } 
+      else 
+      { // whitespace found
+        parseBuffer(buffer,offset)
+        return
       }
     }
     
-    parseBuffer(offset)
+    parseBuffer(buffer , offset)
     if ( scanner.eof ) {
       tokens += Token( "" , TokenType.EOF , TextRegion( scanner.offset , 0 ) )
     }
   }
   
-  private[this] def isNoWhitespace(c:Char) : Boolean = c match 
+  private[this] def isNoWhitespace(c:Char) : Boolean = ! isWhitespace(c)
+  
+  private[this] def isWhitespace(c:Char) : Boolean = c match 
   {
-    case ' ' => false
-    case '\t' => false
-    case _ => true
-  }
+    case ' ' => true
+    case '\t' => true
+    case _ => false
+  }  
     
-  private[this] def getTerminalType(c : Char ) : Option[TokenType] = c match 
+  private[this] def getTerminalType(c : Char ) : TokenType = c match // intentionally not using Option[TokenType] here because of performance 
   {
-      case '\n' => Some( TokenType.EOL )
-      case '['  => Some( TokenType.ANGLE_BRACKETS_OPEN )
-      case ']'  => Some( TokenType.ANGLE_BRACKETS_CLOSE )      
-      case '('  => Some( TokenType.PARENS_OPEN )
-      case ')'  => Some( TokenType.PARENS_CLOSE )
-      case '{'  => Some( TokenType.BRACES_OPEN)
-      case '"'  => Some( TokenType.DOUBLE_QUOTE)
-      case ':'  => Some( TokenType.COLON)
-      case '}'  => Some( TokenType.BRACES_CLOSE)
-      case ','  => Some( TokenType.COMMA )
-      case _ => None
+      case '\n' => TokenType.EOL
+      case '['  => TokenType.ANGLE_BRACKETS_OPEN
+      case ']'  => TokenType.ANGLE_BRACKETS_CLOSE
+      case '('  => TokenType.PARENS_OPEN
+      case ')'  => TokenType.PARENS_CLOSE
+      case '{'  => TokenType.BRACES_OPEN
+      case '"'  => TokenType.DOUBLE_QUOTE
+      case ':'  => TokenType.COLON
+      case '}'  => TokenType.BRACES_CLOSE
+      case ','  => TokenType.COMMA
+      case _ => null 
   }  
 
-  private[this] def parseBuffer(bufferOffset:Int) = 
+  private[this] def parseBuffer(buffer:java.lang.StringBuilder,bufferOffset:Int) = 
   {
-    val content = buffer.toString
-    var head = 0
-    var startIndex = 0
-    while ( startIndex < content.length ) 
+    val str = buffer.toString()
+    if ( str.length() > 0 ) 
     {
-       var offset = 1
-       if ( (startIndex+offset) <= content.length && OperatorType.isValidOperator( content.substring( startIndex , startIndex + offset ) ) )
-       {
-          while ( startIndex+offset+1 <= content.length && OperatorType.isValidOperator( content.substring( startIndex , startIndex + offset+1 ) ) ) { 
-            offset += 1
-          }
-       }
-       if ( (startIndex+offset) <= content.length && OperatorType.isValidOperator( content.substring( startIndex , startIndex + offset ) ) ) 
-       {
-         if ( head != startIndex ) 
-         {
-           val str = content.substring( head , startIndex )
-           val tokenType = getTokenType( str )     
-           tokenType.map( tt => tokens += Token( str , tt , TextRegion( bufferOffset+head , startIndex - head ) ) )
-         }
-         tokens += Token( content.substring( startIndex , startIndex + offset ) , TokenType.OPERATOR , TextRegion( bufferOffset + startIndex + offset , offset ) )
-         startIndex += offset
-         head = startIndex
-       } 
-       else 
-       {
-         startIndex += 1
-       }
+      val tokenType = str match 
+      {
+       case "def"                    => TokenType.FUNCTION_DEFINITION
+       case "val"                    => TokenType.FINAL_VAR
+       case "var"                    => TokenType.MUTABLE_VAR
+       case "external"               => TokenType.EXTERNAL
+       case NUMBER(x)                => TokenType.NUMBER
+       case IDENTIFIER(x)            => TokenType.IDENTIFIER
+       case x => TokenType.TEXT
+      }
+      tokens += Token( str , tokenType , TextRegion( bufferOffset , str.length() ) )
+      buffer.setLength(0)
     }
-    if ( head != startIndex ) 
-    {
-     val str = content.substring( head , startIndex )
-     val tokenType = getTokenType( str )     
-     tokenType.map( tt => tokens += Token( str , tt , TextRegion( bufferOffset+head , startIndex - head ) ) )
-    }
-    buffer.setLength(0)
-  }
-  
-  private[this] def getTokenType(s : String) : Option[TokenType] =  s match 
-  {
-    case "def"                    => Some(TokenType.FUNCTION_DEFINITION)
-    case "val"                    => Some(TokenType.FINAL_VAR)
-    case "var"                    => Some(TokenType.MUTABLE_VAR)
-    case "external"               => Some(TokenType.EXTERNAL)
-    case NUMBER(x)                => Some(TokenType.NUMBER)
-    case IDENTIFIER(x)            => Some(TokenType.IDENTIFIER)
-    case x if x.trim.length() > 0 => Some(TokenType.TEXT)
-    case _                        => None
   }
 }
