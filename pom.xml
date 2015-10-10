@@ -9,6 +9,7 @@
   <properties>
 <!--    <scala.version>2.12.0-M2</scala.version> -->
     <scala.version>2.11.7</scala.version>
+    <antlr.version>4.5.1-1</antlr.version>
   </properties>
   <repositories>
     <repository>
@@ -30,6 +31,11 @@
       <artifactId>scala-library</artifactId>
       <version>${scala.version}</version>
     </dependency>
+    <dependency>
+      <groupId>org.antlr</groupId>
+      <artifactId>antlr4-runtime</artifactId>
+      <version>${antlr.version}</version>
+    </dependency>
   </dependencies>
   <build>
     <plugins>
@@ -43,6 +49,24 @@
             </goals>
           </execution>
         </executions>
+      </plugin>
+
+      <plugin>
+        <groupId>org.antlr</groupId>
+        <artifactId>antlr4-maven-plugin</artifactId>
+        <version>4.3</version>
+        <executions>
+          <execution>
+            <id>antlr</id>
+            <goals>
+              <goal>antlr4</goal>
+            </goals>
+          </execution>
+        </executions>
+          <configuration>
+            <visitor>true</visitor>
+            <outputDirectory>target/generated-sources/antlr4/de/codesourcery/simplevm/grammar</outputDirectory>
+          </configuration>
       </plugin>
     </plugins>
   </build>

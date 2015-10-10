@@ -10,4 +10,14 @@ trait ILexer
   def next() : Token
   
   def pushBack(tok:Token) : Unit
+  
+  final def consume(tok:TokenType) : Boolean = 
+  {
+    if ( peek(tok ) ) {
+      next()
+      true
+    } else {
+      false
+    }
+  }
 }

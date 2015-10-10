@@ -15,6 +15,12 @@ import de.codesourcery.simplevm.compiler.FunctionSignature
 
 class AST extends ASTNode
 {
+  private var astWithErrors : Boolean = false
+  
+  def hasErrors : Boolean = astWithErrors
+  
+  def setHasErrors() : Unit = astWithErrors = true
+  
   override val scope = Some( Scope.createGlobalScope() )
   
   override def print(depth:Int) : String = " " * depth + children.map( _.print(depth+1) ).mkString("\n")
@@ -207,17 +213,19 @@ final class OperatorNode(val operator:OperatorType) extends ASTNode
   }
 }
 
-abstract class FunctionDefOrDecl(val name:Identifier,val returnType : TypeName) extends ASTNode 
+abstract class FunctionDefOrDecl(val name:Identifier,retType : TypeName) extends ASTNode 
 {
-      final def signature : FunctionSignature = {
+  var returnType = retType
+  
+  final def signature : FunctionSignature = 
+  {
+    val args = children
+      .filter( _.isInstanceOf[ParameterList] )
+      .map( _.asInstanceOf[ParameterList] )
+      .map( _.getArguments.map( arg => arg.kind ) )
       
-      val args = children
-        .filter( _.isInstanceOf[ParameterList] )
-        .map( _.asInstanceOf[ParameterList] )
-        .map( _.getArguments.map( arg => arg.kind ) )
-        
-      new FunctionSignature(name,args,returnType)
-    }  
+    new FunctionSignature(name,args,returnType)
+  }  
 }
 
 final class FunctionDeclaration(name:Identifier,returnType : TypeName,val isExternal:Boolean) extends FunctionDefOrDecl(name,returnType) 
@@ -233,7 +241,7 @@ final class FunctionDeclaration(name:Identifier,returnType : TypeName,val isExte
     }    
 }
 
-final class FunctionDefinition(name:Identifier,s:Scope,returnType : TypeName) extends FunctionDefOrDecl(name,returnType) 
+final class FunctionDefinition(name:Identifier,s:Scope,retType : TypeName) extends FunctionDefOrDecl(name,retType) 
 {
     override val scope = Some( s )
     

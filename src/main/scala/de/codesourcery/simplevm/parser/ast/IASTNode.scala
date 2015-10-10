@@ -11,6 +11,14 @@ trait IASTNode extends Iterable[IASTNode] with ICompilationParticipant
   
   final def addChildren(c : Iterable[IASTNode] ) : Unit =  c.foreach( addChild )
   
+  final def addChildren(c : java.util.Collection[IASTNode] ) : Unit =  
+  {
+    val it = c.iterator()
+    while ( it.hasNext() ) {
+      addChild( it.next() )
+    }
+  }
+  
   def addChild(child:IASTNode) : IASTNode
   
   def child(idx:Int) : IASTNode

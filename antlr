@@ -1,0 +1,35 @@
+#!/bin/bash
+
+FOLDER="src/main/antlr4"
+GRAMMAR="minimallanguage"
+GRAMMAR_FILE="${GRAMMAR}.g4"
+PACKAGE="de.codesourcery.simplevm.grammar"
+PACKAGE_PATH=`echo $PACKAGE | tr "." "/"`
+
+CLASS_OUT="target/generated-classes/antlr4"
+SRC_OUT="target/generated-sources/antlr4"
+
+mkdir -p target/classes 2>1 >/dev/null
+mkdir -p ${CLASS_OUT} 2>1 >/dev/null
+
+rm ${CLASS_OUT}/*.java
+rm ${CLASS_OUT}/*.tokens
+rm ${CLASS_OUT}/*.class
+
+if [ "$1" == "-clean" ] ; then 
+  exit 0
+fi
+
+# generate sources
+echo "Generating sources ..."
+java -jar ${ANTLR_JAR} -o ${SRC_OUT} -lib ${FOLDER} ${FOLDER}/${GRAMMAR_FILE}
+
+# compile source
+mv ${SRC_OUT}/src/main/antlr4/* ${SRC_OUT}
+echo "Compiling sources in $SRC_PATH ..."
+javac -d ${CLASS_OUT} ${SRC_OUT}/*.java
+
+# run TestRig
+echo "Running TestRig ..."
+export CLASSPATH="${CLASS_OUT}:${ANTLR_JAR}:$CLASSPATH"
+java -classpath ${CLASSPATH} org.antlr.v4.gui.TestRig ${PACKAGE}.${GRAMMAR} init -gui
