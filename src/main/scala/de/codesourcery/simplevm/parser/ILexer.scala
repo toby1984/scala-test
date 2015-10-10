@@ -8,4 +8,6 @@ trait ILexer
   final def peek(tt:TokenType) : Boolean = peek.hasType( tt )
   
   def next() : Token
+  
+  def pushBack(tok:Token) : Unit
 }

@@ -17,6 +17,8 @@ class Lexer(protected val scanner:IScanner) extends ILexer
 
   override def peek : Token = currentToken( false )   
   
+  override def pushBack(tok:Token) : Unit = tokens.insert( 0 , tok )
+  
   private[this] def currentToken(advance:Boolean) : Token =
   {
     if ( tokens.isEmpty ) {
@@ -29,36 +31,37 @@ class Lexer(protected val scanner:IScanner) extends ILexer
   
   private[this] def parse() 
   {
-    var offset = scanner.offset
+    var offset = scanner.position
     val buffer = new java.lang.StringBuilder
     while( ! scanner.eof && isWhitespace( scanner.peek ) ) {
       scanner.next()
     }
     while ( ! scanner.eof && tokens.isEmpty ) 
     {
-      val c = scanner.next()
+      val c = scanner.peek
       if ( isNoWhitespace( c ) ) 
       {        
         if ( OperatorType.isValidOperator( c ) ) 
         {
           parseBuffer( buffer , offset )
-          offset = scanner.offset-1
-          buffer.append( c )
+          offset = scanner.position
+          buffer.append( scanner.next() )
           while ( ! scanner.eof && OperatorType.isValidOperator( buffer.toString()+scanner.peek ) ) {
             buffer.append( scanner.next() )
           }
           val tok = buffer.toString
-          tokens += Token( tok ,TokenType.OPERATOR, TextRegion(offset,tok.length() ) )
+          tokens += Token( tok ,TokenType.OPERATOR, offset )
           return
         } 
         val tt = getTerminalType(c)
         if ( tt != null ) 
         {
             parseBuffer(buffer , offset)
-            tokens += Token( c , tt , TextRegion( scanner.offset-1 , 1 ) )
+            offset = scanner.position
+            tokens += Token( scanner.next() , tt , offset )
             return
         }
-        buffer.append( c )
+        buffer.append( scanner.next() )
       } 
       else 
       { // whitespace found
@@ -69,7 +72,7 @@ class Lexer(protected val scanner:IScanner) extends ILexer
     
     parseBuffer(buffer , offset)
     if ( scanner.eof ) {
-      tokens += Token( "" , TokenType.EOF , TextRegion( scanner.offset , 0 ) )
+      tokens += Token( "" , TokenType.EOF , offset )
     }
   }
   
@@ -97,7 +100,7 @@ class Lexer(protected val scanner:IScanner) extends ILexer
       case _ => null 
   }  
 
-  private[this] def parseBuffer(buffer:java.lang.StringBuilder,bufferOffset:Int) = 
+  private[this] def parseBuffer(buffer:java.lang.StringBuilder,bufferOffset:Position) = 
   {
     val str = buffer.toString()
     if ( str.length() > 0 ) 
@@ -112,7 +115,7 @@ class Lexer(protected val scanner:IScanner) extends ILexer
        case IDENTIFIER(x)            => TokenType.IDENTIFIER
        case x => TokenType.TEXT
       }
-      tokens += Token( str , tokenType , TextRegion( bufferOffset , str.length() ) )
+      tokens += Token( str , tokenType , bufferOffset )
       buffer.setLength(0)
     }
   }
